@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#116b93" />
+    <meta name="description" content="A colorful cel-shaded arcade boat racing game." />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='52' font-size='52'>🌊</text></svg>" />
+    <title>Aqua Rush — Arcade Boat Racing</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="Playable cel-shaded boat racing game"></canvas>
+
+      <section id="hud" class="race-hud" aria-label="Race information">
+        <div class="hud-brand" aria-hidden="true">
+          <span class="hud-brand-wave">≈</span>
+          <span>AQUA</span><b>RUSH</b>
+        </div>
+
+        <div class="race-progress-cluster">
+          <div class="placement-badge" aria-label="Current position">
+            <span class="hud-label">Position</span>
+            <strong id="position-value">1ST</strong>
+            <span id="position-total">/ 4</span>
+          </div>
+          <div class="lap-readout" aria-label="Current lap">
+            <span class="hud-label">Lap</span>
+            <strong id="lap-value">1 / 3</strong>
+            <span class="lap-ticks" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
+        </div>
+
+        <div class="race-clock" aria-label="Race time">
+          <span class="hud-label">Race time</span>
+          <strong id="timer-value">00:00.000</strong>
+        </div>
+
+        <div class="speed-cluster" aria-label="Speed">
+          <div class="speed-readout">
+            <strong id="speed-value">000</strong><span>KM/H</span>
+          </div>
+          <div class="speed-track" aria-hidden="true"><i id="speed-fill"></i></div>
+          <span class="speed-ticks" aria-hidden="true">0 · · · · MAX</span>
+        </div>
+
+        <div class="boost-cluster" aria-label="Boost status">
+          <div class="boost-heading"><span>Boost</span><b id="boost-label">Ready</b></div>
+          <div class="boost-meter"><i id="boost-fill"></i><span></span><span></span><span></span></div>
+          <small>SPACE</small>
+        </div>
+
+        <div id="status-line" class="status-line" role="status" aria-live="polite">Hold the line</div>
+
+      </section>
+
+      <div id="countdown-overlay" class="countdown-overlay" aria-live="assertive" hidden>
+        <span id="countdown-kicker">Get ready</span>
+        <strong id="countdown-value">3</strong>
+      </div>
+
+      <div id="results-overlay" class="results-overlay" hidden>
+        <section id="results-screen" class="results-screen" role="dialog" aria-modal="true" aria-labelledby="results-title">
+          <span class="results-kicker">Race complete</span>
+          <h1 id="results-title">FINISH!</h1>
+          <div class="result-placement">
+            <span>You placed</span>
+            <strong id="result-position">1ST</strong>
+            <small id="result-field">OF 4 RACERS</small>
+          </div>
+          <div class="result-time">
+            <span>Final time</span>
+            <strong id="result-time">00:00.000</strong>
+          </div>
+          <button id="restart-button" type="button">
+            <span aria-hidden="true">↻</span>
+            Race again
+          </button>
+          <p>Enter / Space</p>
+        </section>
+      </div>
+
+      <div id="touch-controls" aria-label="Touch driving controls">
+        <div id="touch-stick" role="button" aria-label="Steering control">
+          <span class="stick-mark north" aria-hidden="true">▲</span>
+          <span class="stick-mark west" aria-hidden="true">◀</span>
+          <span class="stick-mark east" aria-hidden="true">▶</span>
+          <span class="stick-mark south" aria-hidden="true">▼</span>
+          <div id="touch-knob"></div>
+        </div>
+        <button id="dash-button" type="button" aria-label="Use boost"><span>Boost</span><small>Hold</small></button>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
