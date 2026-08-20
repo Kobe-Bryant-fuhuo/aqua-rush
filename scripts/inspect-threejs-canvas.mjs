@@ -19,6 +19,7 @@ function parseArgs(argv) {
     wait: 750,
     state: null,
     seed: undefined,
+    driveActive: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -29,10 +30,12 @@ function parseArgs(argv) {
     else if (value === '--wait') args.wait = Number(argv[++i]);
     else if (value === '--state') args.state = argv[++i];
     else if (value === '--seed') args.seed = Number(argv[++i]);
+    else if (value === '--drive-active') args.driveActive = true;
     else if (value === '-h' || value === '--help') {
       console.log(
-        'Usage: inspect-threejs-canvas.mjs [--url URL] [--out DIR] [--mobile] [--wait MS] [--state NAME] [--seed N]\n' +
+        'Usage: inspect-threejs-canvas.mjs [--url URL] [--out DIR] [--mobile] [--wait MS] [--state NAME] [--seed N] [--drive-active]\n' +
           '  --state/--seed drive window.__THREE_GAME_TEST_HOOKS__ (setState/seed) before capture\n' +
+          '  --drive-active uses trusted keyboard input plus deterministic game time for a truthful race capture\n' +
           '  so specific game states can be measured deterministically.',
       );
       process.exit(0);
@@ -231,6 +234,38 @@ async function sampleCanvas(page, mode) {
   };
 }
 
+async function driveTruthfulActiveRace(page) {
+  const advance = (milliseconds) => page.evaluate((duration) => {
+    if (typeof window.advanceTime !== 'function') {
+      throw new Error('Required deterministic window.advanceTime hook is missing.');
+    }
+    window.advanceTime(duration);
+  }, milliseconds);
+
+  await page.keyboard.down('KeyW');
+  try {
+    await page.keyboard.down('KeyD');
+    await advance(580);
+    await page.keyboard.up('KeyD');
+    await page.keyboard.down('Space');
+    await advance(420);
+    await page.keyboard.up('Space');
+    await advance(430);
+    await page.keyboard.down('KeyA');
+    await advance(530);
+    await page.keyboard.up('KeyA');
+    await page.keyboard.down('Space');
+    await advance(420);
+    await page.keyboard.up('Space');
+    await advance(270);
+  } finally {
+    await page.keyboard.up('KeyD');
+    await page.keyboard.up('KeyA');
+    await page.keyboard.up('Space');
+    await page.keyboard.up('KeyW');
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   await mkdir(args.out, { recursive: true });
@@ -264,6 +299,14 @@ async function main() {
         'warning: --state/--seed requested but __THREE_GAME_TEST_HOOKS__ is not defined; capturing the current state instead',
       );
     }
+  }
+
+
+  if (args.driveActive) {
+    if (args.state !== 'active-play') {
+      throw new Error('--drive-active requires --state active-play.');
+    }
+    await driveTruthfulActiveRace(page);
   }
 
   await page.waitForTimeout(args.wait);
@@ -308,4 +351,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

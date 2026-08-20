@@ -12,11 +12,11 @@ export type CameraTuning = {
 };
 
 export const DEFAULT_CAMERA_TUNING: CameraTuning = {
-  distance: 10.8,
-  height: 5.1,
+  distance: 15.6,
+  height: 5.25,
   spring: 46,
   damping: 13.5,
-  lookAhead: 5.5,
+  lookAhead: 3,
   baseFov: 54,
   speedFov: 9,
 };
@@ -65,7 +65,7 @@ export class CameraRig {
 
     this.desiredLookTarget
       .copy(boat.group.position)
-      .addScaledVector(this.forward, this.tuning.lookAhead + Math.max(0, boat.speed) * 0.11);
+      .addScaledVector(this.forward, this.tuning.lookAhead + Math.max(0, boat.speed) * 0.05);
     this.desiredLookTarget.y += 0.7;
     this.lookTarget.lerp(this.desiredLookTarget, 1 - Math.exp(-8.5 * delta));
     this.camera.lookAt(this.lookTarget);

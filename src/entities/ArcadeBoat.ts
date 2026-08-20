@@ -37,6 +37,8 @@ export const DEFAULT_PLAYER_TUNING: BoatTuning = {
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 export class ArcadeBoat {
+  private static readonly activeBoats = new Set<ArcadeBoat>();
+
   readonly group = new THREE.Group();
   readonly velocity = new THREE.Vector3();
   readonly radius = 1.05;
@@ -46,6 +48,16 @@ export class ArcadeBoat {
   heading = 0;
   boost = 1;
   boosting = false;
+  ordinaryBoosting = false;
+  miniBoosting = false;
+  drifting = false;
+  driftCharge = 0;
+  driftQuality = 0;
+  contact = 1;
+  airborne = false;
+  landingIntensity = 0;
+  steering = 0;
+  throttle = 0;
 
   private readonly forward = new THREE.Vector3(0, 0, -1);
   private readonly desiredVelocity = new THREE.Vector3();
@@ -59,21 +71,68 @@ export class ArcadeBoat {
   private readonly ownedMaterials: THREE.Material[] = [];
   private currentSteer = 0;
   private currentThrottle = 0;
+  private driftDirection = 0;
+  private miniBoostTimer = 0;
+  private miniBoostStrength = 0;
+  private verticalVelocity = 0;
 
   constructor(readonly id: string, color: THREE.ColorRepresentation, model?: THREE.Object3D) {
     this.group.name = `racer-${id}`;
     this.visualRoot.name = `racer-visual-${id}`;
     this.group.add(this.visualRoot);
     this.visualRoot.add(model ?? this.createFallbackModel(color));
+    ArcadeBoat.activeBoats.add(this);
+  }
+
+  static getActiveBoats(): ReadonlySet<ArcadeBoat> {
+    return ArcadeBoat.activeBoats;
   }
 
   drive(delta: number, intent: RaceIntent, tuning: BoatTuning, enabled: boolean): void {
     const throttle = enabled ? THREE.MathUtils.clamp(intent.throttle, -1, 1) : 0;
     const steer = enabled ? THREE.MathUtils.clamp(intent.steer, -1, 1) : 0;
-    const wantsBoost = enabled && intent.boost && throttle > 0.05 && this.boost > 0.005;
-    this.boosting = wantsBoost;
+    const boostHeld = enabled && intent.boost && throttle > 0.05;
+    const speedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
+    const canStartDrift = boostHeld && Math.abs(steer) > 0.3 && speedRatio > 0.28;
+    if (!this.drifting && canStartDrift) {
+      this.drifting = true;
+      this.driftDirection = Math.sign(steer) || 1;
+      this.driftCharge = 0;
+    }
+
+    if (this.drifting && boostHeld) {
+      const steerAgreement = Math.sign(steer || this.driftDirection) === this.driftDirection;
+      const steerSweetSpot = 1 - Math.min(1, Math.abs(Math.abs(steer) - 0.68) / 0.68);
+      this.driftQuality = steerAgreement
+        ? THREE.MathUtils.clamp(steerSweetSpot * (0.35 + speedRatio * 0.65), 0, 1)
+        : 0;
+      if (steerAgreement && Math.abs(steer) > 0.2) {
+        this.driftCharge = Math.min(1, this.driftCharge + (0.1 + this.driftQuality * 0.32) * delta);
+      } else {
+        this.driftCharge = Math.max(0, this.driftCharge - 0.42 * delta);
+      }
+    } else if (this.drifting && !boostHeld) {
+      if (this.driftCharge >= 0.16) {
+        this.miniBoostStrength = THREE.MathUtils.smoothstep(this.driftCharge, 0.1, 1);
+        this.miniBoostTimer = THREE.MathUtils.lerp(0.22, 0.78, this.miniBoostStrength);
+      } else {
+        // A cancelled drift costs momentum instead of becoming a free sharper turn.
+        this.speed *= 0.9;
+        this.velocity.multiplyScalar(0.9);
+      }
+      this.drifting = false;
+      this.driftCharge = 0;
+      this.driftQuality = 0;
+    }
+
+    this.miniBoostTimer = Math.max(0, this.miniBoostTimer - delta);
+    this.miniBoosting = enabled && this.miniBoostTimer > 0;
+    this.ordinaryBoosting = boostHeld && !this.drifting && this.boost > 0.005;
+    this.boosting = this.ordinaryBoosting || this.miniBoosting;
     this.currentSteer = steer;
     this.currentThrottle = throttle;
+    this.steering = steer;
+    this.throttle = throttle;
 
     if (throttle > 0) {
       this.speed += tuning.acceleration * throttle * delta;
@@ -85,23 +144,32 @@ export class ArcadeBoat {
       this.speed = Math.abs(this.speed) <= drag ? 0 : this.speed - Math.sign(this.speed) * drag;
     }
 
-    if (this.boosting) {
+    if (this.ordinaryBoosting) {
       this.speed += tuning.boostAcceleration * delta;
       this.boost = Math.max(0, this.boost - tuning.boostDrain * delta);
     } else {
-      this.boost = Math.min(1, this.boost + tuning.boostRecharge * delta);
+      const rechargeScale = this.drifting ? 0.35 : 1;
+      this.boost = Math.min(1, this.boost + tuning.boostRecharge * rechargeScale * delta);
+    }
+    if (this.miniBoosting) {
+      this.speed += tuning.boostAcceleration * (0.6 + this.miniBoostStrength * 0.62) * delta;
+    }
+    if (this.drifting) {
+      const poorDriftTax = THREE.MathUtils.lerp(1.9, 0.35, this.driftQuality);
+      this.speed -= Math.sign(this.speed || 1) * poorDriftTax * delta;
     }
 
     const maxForward = this.boosting ? tuning.boostedMaxSpeed : tuning.maxForwardSpeed;
     this.speed = THREE.MathUtils.clamp(this.speed, -tuning.maxReverseSpeed, maxForward);
-    const speedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
-    const steeringAuthority = 0.22 + speedRatio * 0.78;
-    const driftTurnBonus = this.boosting ? 1.18 : 1;
+    const postAccelerationSpeedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
+    const steeringAuthority = (0.58 + postAccelerationSpeedRatio * 0.42) * (1 - postAccelerationSpeedRatio * 0.13);
+    const driftTurnBonus = this.drifting ? 1.3 : this.boosting ? 0.94 : 1;
     this.heading += steer * tuning.turnRate * steeringAuthority * driftTurnBonus * Math.sign(this.speed || 1) * delta;
 
     this.getForward(this.forward);
     this.desiredVelocity.copy(this.forward).multiplyScalar(this.speed);
-    const grip = this.boosting ? tuning.driftGrip : tuning.lateralGrip;
+    const highSpeedGrip = tuning.lateralGrip * (1 + postAccelerationSpeedRatio * 0.18);
+    const grip = this.drifting ? tuning.driftGrip : highSpeedGrip;
     const gripFactor = 1 - Math.exp(-grip * delta);
     this.velocity.lerp(this.desiredVelocity, gripFactor);
     this.group.position.addScaledVector(this.velocity, delta);
@@ -109,18 +177,71 @@ export class ArcadeBoat {
 
   updateWaterPose(delta: number, elapsed: number, waves: WaveSurface): void {
     const { x, z } = this.group.position;
-    this.group.position.y = waves.getHeight(x, z, elapsed) + 0.42;
-    waves.getNormal(x, z, elapsed, this.surfaceNormal);
     this.getForward(this.surfaceForward);
-    this.surfaceForward.addScaledVector(this.surfaceNormal, -this.surfaceForward.dot(this.surfaceNormal)).normalize();
-    this.surfaceRight.copy(this.surfaceForward).cross(this.surfaceNormal).normalize();
+    this.surfaceRight.copy(this.surfaceForward).cross(WORLD_UP).normalize();
+    const bowDistance = 1.48;
+    const halfBeam = 0.72;
+    const bowHeight = waves.getHeight(x + this.surfaceForward.x * bowDistance, z + this.surfaceForward.z * bowDistance, elapsed);
+    const sternHeight = waves.getHeight(x - this.surfaceForward.x * bowDistance, z - this.surfaceForward.z * bowDistance, elapsed);
+    const portHeight = waves.getHeight(x - this.surfaceRight.x * halfBeam, z - this.surfaceRight.z * halfBeam, elapsed);
+    const starboardHeight = waves.getHeight(x + this.surfaceRight.x * halfBeam, z + this.surfaceRight.z * halfBeam, elapsed);
+    const centerHeight = waves.getHeight(x, z, elapsed);
+    const targetWaterY = (centerHeight * 2 + bowHeight + sternHeight + portHeight + starboardHeight) / 6 + 0.42;
+
+    const wasAirborne = this.airborne;
+    const dt = Math.min(delta, 0.05);
+    if (delta > 0.15 || !Number.isFinite(this.group.position.y)) {
+      this.group.position.y = targetWaterY;
+      this.verticalVelocity = 0;
+      this.contact = 1;
+      this.airborne = false;
+    } else {
+      const gap = this.group.position.y - targetWaterY;
+      if (gap < 0.14) {
+        this.verticalVelocity += (targetWaterY - this.group.position.y) * 34 * dt;
+        this.verticalVelocity *= Math.exp(-5.2 * dt);
+      } else {
+        this.verticalVelocity -= 7.8 * dt;
+      }
+      this.verticalVelocity = THREE.MathUtils.clamp(this.verticalVelocity, -4.2, 3.4);
+      this.group.position.y += this.verticalVelocity * dt;
+      if (this.group.position.y < targetWaterY - 0.12) {
+        this.group.position.y = targetWaterY - 0.12;
+        this.verticalVelocity = Math.max(0, this.verticalVelocity * -0.16);
+      }
+      const resolvedGap = this.group.position.y - targetWaterY;
+      this.contact = 1 - THREE.MathUtils.smoothstep(resolvedGap, 0.045, 0.34);
+      this.airborne = this.contact < 0.25;
+    }
+
+    this.landingIntensity = THREE.MathUtils.damp(this.landingIntensity, 0, 5.5, dt);
+    if (wasAirborne && !this.airborne) {
+      this.landingIntensity = Math.max(
+        this.landingIntensity,
+        THREE.MathUtils.clamp(Math.max(0, -this.verticalVelocity) * 0.24 + Math.abs(this.speed) * 0.012, 0.12, 1),
+      );
+    }
+
+    // Bow/stern and port/starboard baselines produce stable pitch and roll.
+    this.surfaceForward.set(
+      this.surfaceForward.x * bowDistance * 2,
+      bowHeight - sternHeight,
+      this.surfaceForward.z * bowDistance * 2,
+    ).normalize();
+    this.surfaceRight.set(
+      this.surfaceRight.x * halfBeam * 2,
+      starboardHeight - portHeight,
+      this.surfaceRight.z * halfBeam * 2,
+    ).normalize();
+    this.surfaceNormal.crossVectors(this.surfaceRight, this.surfaceForward).normalize();
+    this.surfaceRight.crossVectors(this.surfaceForward, this.surfaceNormal).normalize();
     this.surfaceBack.copy(this.surfaceForward).multiplyScalar(-1);
     this.poseMatrix.makeBasis(this.surfaceRight, this.surfaceNormal, this.surfaceBack);
     this.poseQuaternion.setFromRotationMatrix(this.poseMatrix);
     this.group.quaternion.slerp(this.poseQuaternion, 1 - Math.exp(-7.5 * delta));
 
-    const targetRoll = -this.currentSteer * Math.min(0.24, Math.abs(this.speed) * 0.0095);
-    const targetPitch = -this.currentThrottle * 0.055 + (this.boosting ? -0.035 : 0);
+    const targetRoll = -this.currentSteer * Math.min(this.drifting ? 0.34 : 0.22, Math.abs(this.speed) * 0.0095);
+    const targetPitch = -this.currentThrottle * 0.052 + (this.boosting ? -0.032 : 0) + (this.airborne ? -0.025 : 0);
     this.visualRoot.rotation.z = THREE.MathUtils.damp(this.visualRoot.rotation.z, targetRoll, 8, delta);
     this.visualRoot.rotation.x = THREE.MathUtils.damp(this.visualRoot.rotation.x, targetPitch, 7, delta);
   }
@@ -136,6 +257,16 @@ export class ArcadeBoat {
     this.syncSpeedFromVelocity();
   }
 
+  restoreBoost(amount: number): void {
+    this.boost = THREE.MathUtils.clamp(this.boost + Math.max(0, amount), 0, 1);
+  }
+
+  grantMiniBoost(strength: number): void {
+    const normalized = THREE.MathUtils.clamp(strength, 0, 1);
+    this.miniBoostStrength = Math.max(this.miniBoostStrength, normalized);
+    this.miniBoostTimer = Math.max(this.miniBoostTimer, THREE.MathUtils.lerp(0.28, 0.88, normalized));
+  }
+
   syncSpeedFromVelocity(): void {
     this.getForward(this.forward);
     this.speed = this.velocity.dot(this.forward);
@@ -148,6 +279,20 @@ export class ArcadeBoat {
     this.velocity.set(0, 0, 0);
     this.boost = 1;
     this.boosting = false;
+    this.ordinaryBoosting = false;
+    this.miniBoosting = false;
+    this.drifting = false;
+    this.driftCharge = 0;
+    this.driftQuality = 0;
+    this.contact = 1;
+    this.airborne = false;
+    this.landingIntensity = 0;
+    this.steering = 0;
+    this.throttle = 0;
+    this.driftDirection = 0;
+    this.miniBoostTimer = 0;
+    this.miniBoostStrength = 0;
+    this.verticalVelocity = 0;
     this.currentSteer = 0;
     this.currentThrottle = 0;
     this.group.quaternion.setFromAxisAngle(WORLD_UP, heading);
@@ -155,6 +300,7 @@ export class ArcadeBoat {
   }
 
   dispose(): void {
+    ArcadeBoat.activeBoats.delete(this);
     for (const geometry of this.ownedGeometries) geometry.dispose();
     for (const material of this.ownedMaterials) material.dispose();
   }

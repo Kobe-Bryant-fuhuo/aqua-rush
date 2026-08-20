@@ -26,6 +26,9 @@ export type RacerRaceState = RacerRegistration & {
   finished: boolean;
   finishTime: number | null;
   wrongWay: boolean;
+  currentLapTime: number;
+  bestLap: number | null;
+  lastLap: number | null;
 };
 
 export type RaceEvent =
@@ -39,7 +42,16 @@ export type RaceEvent =
 
 type InternalRaceState = RacerRaceState & {
   previousProgress: number;
+  previousPosition: THREE.Vector3;
   wrongWayDuration: number;
+  lapStartedAt: number;
+};
+
+export type CheckpointValidationStats = {
+  accepted: number;
+  rejected: number;
+  lastReason: string | null;
+  lastIndex: number | null;
 };
 
 export class RaceManager {
@@ -48,11 +60,13 @@ export class RaceManager {
   countdown = 3;
   raceTime = 0;
   finalPlacement: number | null = null;
+  readonly validation: CheckpointValidationStats = { accepted: 0, rejected: 0, lastReason: null, lastIndex: null };
 
   private readonly states = new Map<string, InternalRaceState>();
   private readonly events: RaceEvent[] = [];
   private readonly tangent = new THREE.Vector3();
   private lastCountdownTick = 4;
+  private checkpointCount = 12;
 
   constructor(registrations: RacerRegistration[]) {
     for (const registration of registrations) {
@@ -67,6 +81,10 @@ export class RaceManager {
     this.finalPlacement = null;
     this.events.length = 0;
     this.lastCountdownTick = 4;
+    this.validation.accepted = 0;
+    this.validation.rejected = 0;
+    this.validation.lastReason = null;
+    this.validation.lastIndex = null;
     for (const [id, oldState] of this.states) {
       const progress = initialProgress.get(id) ?? 0;
       this.states.set(id, this.createState(oldState, progress));
@@ -74,6 +92,7 @@ export class RaceManager {
   }
 
   startImmediately(frames: RacerFrame[], track: RaceTrack): void {
+    this.checkpointCount = track.checkpointPlanes.length;
     this.phase = 'racing';
     this.countdown = 0;
     this.raceTime = 0;
@@ -84,11 +103,13 @@ export class RaceManager {
       state.progress = projection.progress;
       state.previousProgress = projection.progress;
       state.distanceFromTrack = projection.distance;
+      state.previousPosition.copy(frame.position);
     }
     this.events.push({ type: 'start' });
   }
 
   update(delta: number, frames: RacerFrame[], track: RaceTrack): void {
+    this.checkpointCount = track.checkpointPlanes.length;
     if (this.phase === 'countdown') {
       this.countdown = Math.max(0, this.countdown - delta);
       const tick = Math.ceil(this.countdown);
@@ -104,6 +125,7 @@ export class RaceManager {
           const progress = track.project(frame.position).progress;
           state.progress = progress;
           state.previousProgress = progress;
+          state.previousPosition.copy(frame.position);
         }
         this.events.push({ type: 'start' });
       }
@@ -147,6 +169,16 @@ export class RaceManager {
     return this.events.splice(0, this.events.length);
   }
 
+  synchronizeFrame(frame: RacerFrame, track: RaceTrack): void {
+    const state = this.states.get(frame.id);
+    if (!state) return;
+    const projection = track.project(frame.position);
+    state.progress = projection.progress;
+    state.previousProgress = projection.progress;
+    state.previousPosition.copy(frame.position);
+    state.distanceFromTrack = projection.distance;
+  }
+
   /** Deterministic QA helper: advances only the required checkpoint sequence. */
   debugPassNextCheckpoint(id: string): void {
     const state = this.states.get(id);
@@ -163,7 +195,7 @@ export class RaceManager {
   debugCompleteLap(id: string): void {
     const state = this.states.get(id);
     if (!state || state.finished) return;
-    const remaining = trackCheckpointCount() - state.nextCheckpoint;
+    const remaining = this.checkpointCount - state.nextCheckpoint;
     for (let step = 0; step < remaining; step += 1) this.passCheckpoint(state);
     this.updatePlacements();
     if (state.isPlayer && state.finished) {
@@ -176,7 +208,7 @@ export class RaceManager {
   debugFinish(id: string): void {
     const state = this.states.get(id);
     if (!state || state.finished) return;
-    let safety = this.totalLaps * trackCheckpointCount() + 1;
+    let safety = this.totalLaps * this.checkpointCount + 1;
     while (!state.finished && safety > 0) {
       this.passCheckpoint(state);
       safety -= 1;
@@ -194,9 +226,9 @@ export class RaceManager {
       const state = this.states.get(frame.id);
       if (!state) continue;
       const projection = track.project(frame.position);
-      const previous = state.previousProgress;
       state.progress = projection.progress;
       state.distanceFromTrack = projection.distance;
+      state.currentLapTime = Math.max(0, this.raceTime - state.lapStartedAt);
 
       track.getTangentAt(projection.progress, this.tangent);
       const forwardVelocity = frame.velocity.dot(this.tangent);
@@ -209,16 +241,28 @@ export class RaceManager {
       if (nowWrongWay && !state.wrongWay) this.events.push({ type: 'wrong-way', racerId: state.id });
       state.wrongWay = nowWrongWay;
 
-      if (validate && !state.finished && projection.distance <= track.halfWidth * 1.45) {
-        const travelled = track.forwardDistance(previous, projection.progress);
-        const target = track.checkpoints[state.nextCheckpoint];
-        const targetDistance = track.forwardDistance(previous, target);
-        // A backwards step wraps to nearly one; reject implausible teleports as well.
-        if (travelled <= 0.16 && targetDistance <= travelled + 0.0035) {
-          this.passCheckpoint(state);
+      if (validate && !state.finished) {
+        const stepDistance = state.previousPosition.distanceTo(frame.position);
+        if (stepDistance <= 18) {
+          const crossing = track.validateCheckpointCrossing(state.nextCheckpoint, state.previousPosition, frame.position, frame.velocity);
+          if (crossing.valid) {
+            this.validation.accepted += 1;
+            this.validation.lastReason = 'accepted';
+            this.validation.lastIndex = state.nextCheckpoint;
+            this.passCheckpoint(state);
+          } else if (crossing.reason !== 'no-crossing') {
+            this.validation.rejected += 1;
+            this.validation.lastReason = crossing.reason;
+            this.validation.lastIndex = state.nextCheckpoint;
+          }
+        } else {
+          this.validation.rejected += 1;
+          this.validation.lastReason = 'teleport';
+          this.validation.lastIndex = state.nextCheckpoint;
         }
       }
       state.previousProgress = projection.progress;
+      state.previousPosition.copy(frame.position);
     }
   }
 
@@ -228,10 +272,13 @@ export class RaceManager {
     state.checkpointCount += 1;
     state.nextCheckpoint += 1;
     this.events.push({ type: 'checkpoint', racerId: state.id, checkpoint });
-    if (state.nextCheckpoint < trackCheckpointCount()) return;
+    if (state.nextCheckpoint < this.checkpointCount) return;
 
     state.nextCheckpoint = 0;
     state.lap += 1;
+    state.lastLap = Math.max(0, this.raceTime - state.lapStartedAt);
+    state.bestLap = state.bestLap === null ? state.lastLap : Math.min(state.bestLap, state.lastLap);
+    state.lapStartedAt = this.raceTime;
     state.displayLap = Math.min(this.totalLaps, state.lap + 1);
     this.events.push({ type: 'lap', racerId: state.id, lap: state.lap });
     if (state.lap >= this.totalLaps) {
@@ -272,10 +319,11 @@ export class RaceManager {
       finishTime: null,
       wrongWay: false,
       wrongWayDuration: 0,
+      currentLapTime: 0,
+      bestLap: null,
+      lastLap: null,
+      previousPosition: new THREE.Vector3(),
+      lapStartedAt: 0,
     };
   }
-}
-
-function trackCheckpointCount(): number {
-  return 7;
 }

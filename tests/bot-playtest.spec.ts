@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 import {
+  callRaceHook,
   captureRuntimeErrors,
   expectNoRuntimeErrors,
   loadRaceState,
   readRaceDiagnostics,
+  waitForRaceGame,
   type RaceDiagnostics,
 } from './race-test-helpers';
 
@@ -12,6 +14,15 @@ const STEP_MS = Number(process.env.BOT_PLAYTEST_STEP_MS ?? 100);
 const BOT_STEPS = Number(process.env.BOT_PLAYTEST_STEPS ?? 140);
 const REQUIRE_FINISH = process.env.BOT_REQUIRE_FINISH === '1';
 const BOOST_ENABLED = process.env.BOT_DISABLE_BOOST !== '1';
+const BOT_TRACK = process.env.BOT_TRACK ?? 'sunset-circuit';
+const BOT_MODE = process.env.BOT_MODE ?? 'quick-race';
+
+if (BOT_TRACK !== 'sunset-circuit' && BOT_TRACK !== 'storm-reef') {
+  throw new Error(`Unsupported BOT_TRACK: ${BOT_TRACK}`);
+}
+if (BOT_MODE !== 'quick-race' && BOT_MODE !== 'time-trial') {
+  throw new Error(`Unsupported BOT_MODE: ${BOT_MODE}`);
+}
 
 function normalizeAngle(value: number): number {
   return Math.atan2(Math.sin(value), Math.cos(value));
@@ -35,7 +46,19 @@ test('bot playtest: feedback steering drives real race progress without softlock
   test.setTimeout(Math.max(45_000, BOT_STEPS * STEP_MS * 2.2 + 15_000));
 
   const errors = captureRuntimeErrors(page);
-  await loadRaceState(page, 'active-play');
+  if (BOT_TRACK === 'sunset-circuit' && BOT_MODE === 'quick-race') {
+    // Preserve the exact V2 default setup and all existing bot semantics.
+    await loadRaceState(page, 'active-play');
+  } else {
+    await waitForRaceGame(page);
+    await callRaceHook(page, 'seed', BOT_SEED);
+    await callRaceHook(page, 'hideDebugUi', true);
+    await callRaceHook(page, 'setReducedMotion', false);
+    await callRaceHook(page, 'selectSession', BOT_MODE, BOT_TRACK);
+    await page.evaluate(() => window.advanceTime?.(3_100));
+    await callRaceHook(page, 'setPausedForScreenshot', false);
+    await expect.poll(async () => (await readRaceDiagnostics(page)).state).toBe('racing');
+  }
   const before = await readRaceDiagnostics(page);
 
   let previous = before;
@@ -149,6 +172,8 @@ test('bot playtest: feedback steering drives real race progress without softlock
 
   const report = {
     seed: BOT_SEED,
+    trackId: BOT_TRACK,
+    mode: BOT_MODE,
     steps: executedSteps,
     plannedSteps: BOT_STEPS,
     boostEnabled: BOOST_ENABLED,
@@ -162,7 +187,7 @@ test('bot playtest: feedback steering drives real race progress without softlock
     distanceTravelled: Number(distanceTravelled.toFixed(2)),
     softlockWindows,
     collisions: after.collisions.total - before.collisions.total,
-    aiProgressed,
+    aiProgressed: BOT_MODE === 'time-trial' ? null : aiProgressed,
     state: after.state,
     complete: after.complete,
     finalPlacement: after.finalPlacement,
@@ -184,7 +209,11 @@ test('bot playtest: feedback steering drives real race progress without softlock
     report.progressBefore,
   );
   expect(report.softlockWindows, 'repeated input windows produced neither motion nor progress').toBeLessThanOrEqual(4);
-  expect(report.aiProgressed, 'AI opponents must progress during the bot run').toBe(true);
+  if (BOT_MODE === 'quick-race') {
+    expect(report.aiProgressed, 'AI opponents must progress during the bot run').toBe(true);
+  } else {
+    expect(after.racers, 'Time Trial must remain a solo session').toHaveLength(1);
+  }
   if (REQUIRE_FINISH) {
     expect(report.state, 'extended bot run must naturally reach the finish state').toBe('finished');
     expect(report.complete).toBe(true);

@@ -12,6 +12,71 @@
     <main id="app">
       <canvas id="game-canvas" aria-label="Playable cel-shaded boat racing game"></canvas>
 
+      <div id="flow-overlay" class="flow-overlay" hidden>
+        <section id="title-screen" class="flow-screen title-screen" role="dialog" aria-modal="true" aria-labelledby="title-heading" hidden>
+          <span class="flow-eyebrow">Open-water arcade racing</span>
+          <div class="title-lockup" aria-label="Aqua Rush 3">
+            <span class="title-wave" aria-hidden="true">≈</span>
+            <h1 id="title-heading">AQUA <b>RUSH</b></h1>
+            <strong>V3</strong>
+          </div>
+          <p>Chase the racing line. Own the open water.</p>
+          <button id="title-start-button" class="menu-primary flow-primary" type="button">Start racing</button>
+          <small>Keyboard, gamepad-style touch controls</small>
+        </section>
+
+        <section id="mode-select-screen" class="flow-screen mode-select-screen" role="dialog" aria-modal="true" aria-labelledby="mode-select-title" hidden>
+          <header class="flow-heading">
+            <span class="flow-eyebrow">Choose your challenge</span>
+            <h2 id="mode-select-title">Race mode</h2>
+          </header>
+          <div class="mode-card-grid" role="group" aria-label="Two race modes">
+            <button id="mode-quick-race-button" class="selection-card mode-card" type="button" data-mode="quick-race">
+              <span class="selection-index" aria-hidden="true">01</span>
+              <span class="selection-copy"><strong>Quick Race</strong><small>Four racers · three laps</small></span>
+              <span class="selection-glyph" aria-hidden="true">◆◆◆◆</span>
+            </button>
+            <button id="mode-time-trial-button" class="selection-card mode-card" type="button" data-mode="time-trial">
+              <span class="selection-index" aria-hidden="true">02</span>
+              <span class="selection-copy"><strong>Time Trial</strong><small>Solo run · beat your records</small></span>
+              <span class="selection-glyph" aria-hidden="true">◷</span>
+            </button>
+          </div>
+          <button id="mode-back-button" class="menu-quiet flow-back" type="button"><span aria-hidden="true">‹</span> Back</button>
+        </section>
+
+        <section id="course-select-screen" class="flow-screen course-select-screen" role="dialog" aria-modal="true" aria-labelledby="course-select-title" hidden>
+          <header class="flow-heading">
+            <span id="course-mode-label" class="flow-eyebrow">Quick Race</span>
+            <h2 id="course-select-title">Choose a course</h2>
+          </header>
+          <div class="course-card-grid" role="group" aria-label="Two racing courses">
+            <button id="course-sunset-circuit-button" class="selection-card course-card is-selected" type="button" data-track="sunset-circuit" aria-pressed="true">
+              <span class="course-art course-art-sunset" aria-hidden="true"><i></i><b>SC</b></span>
+              <span class="selection-copy">
+                <span class="course-meta"><em>Breezy</em><i>Golden hour</i></span>
+                <strong id="course-sunset-name">Sunset Circuit</strong>
+                <small id="course-sunset-description">Fast island sweepers and forgiving open-water lines.</small>
+                <span class="course-record"><i>Best total</i><b id="course-sunset-record">--:--.---</b></span>
+              </span>
+            </button>
+            <button id="course-storm-reef-button" class="selection-card course-card" type="button" data-track="storm-reef" aria-pressed="false">
+              <span class="course-art course-art-storm" aria-hidden="true"><i></i><b>SR</b></span>
+              <span class="selection-copy">
+                <span class="course-meta"><em>Technical</em><i>Cross swell</i></span>
+                <strong id="course-storm-name">Storm Reef</strong>
+                <small id="course-storm-description">A storm-cut channel, hairpin and high-risk reward line.</small>
+                <span class="course-record"><i>Best total</i><b id="course-storm-record">--:--.---</b></span>
+              </span>
+            </button>
+          </div>
+          <div class="course-select-actions">
+            <button id="course-back-button" class="menu-quiet flow-back" type="button"><span aria-hidden="true">‹</span> Modes</button>
+            <p>Pass every checkpoint in order. The guide line shows the route, not a wall.</p>
+          </div>
+        </section>
+      </div>
+
       <section id="hud" class="race-hud" aria-label="Race information">
         <div class="hud-brand" aria-hidden="true">
           <span class="hud-brand-wave">≈</span>
@@ -32,8 +97,23 @@
         </div>
 
         <div class="race-clock" aria-label="Race time">
-          <span class="hud-label">Race time</span>
+          <span id="timer-label" class="hud-label">Race time</span>
           <strong id="timer-value">00:00.000</strong>
+        </div>
+
+        <div id="time-trial-cluster" class="time-trial-cluster" aria-label="Time Trial timing" hidden>
+          <span><i>Current lap</i><b id="time-trial-current-lap">00:00.000</b></span>
+          <span><i>Best lap</i><b id="time-trial-best-lap">--:--.---</b></span>
+          <strong id="time-trial-delta" data-tone="neutral">± --.---</strong>
+        </div>
+
+        <div class="hud-actions" aria-label="Race controls">
+          <button id="pause-button" class="hud-icon-button" type="button" aria-label="Pause race" title="Pause (P / Esc)">
+            <span aria-hidden="true">Ⅱ</span>
+          </button>
+          <button id="mute-button" class="hud-icon-button" type="button" aria-label="Mute audio" title="Mute audio">
+            <span id="mute-icon" aria-hidden="true">♪</span>
+          </button>
         </div>
 
         <div class="speed-cluster" aria-label="Speed">
@@ -52,6 +132,13 @@
 
         <div id="status-line" class="status-line" role="status" aria-live="polite">Hold the line</div>
 
+        <div id="turn-feedback" class="turn-feedback" aria-label="Steering and drift feedback">
+          <span class="turn-chevron turn-left" aria-hidden="true">‹</span>
+          <span class="turn-core"><i id="drift-charge-fill"></i></span>
+          <span class="turn-chevron turn-right" aria-hidden="true">›</span>
+          <small id="turn-feedback-label">GRIP</small>
+        </div>
+
       </section>
 
       <div id="countdown-overlay" class="countdown-overlay" aria-live="assertive" hidden>
@@ -59,24 +146,54 @@
         <strong id="countdown-value">3</strong>
       </div>
 
+      <div id="pause-overlay" class="pause-overlay" hidden>
+        <section class="pause-screen" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+          <span class="results-kicker">Aqua Rush</span>
+          <h2 id="pause-title">RACE PAUSED</h2>
+          <p>Catch your breath. The clock and every racer are frozen.</p>
+          <div class="pause-actions">
+            <button id="resume-button" class="menu-primary" type="button">Resume race</button>
+            <button id="pause-restart-button" class="menu-secondary" type="button">Restart</button>
+            <button id="pause-recovery-button" class="menu-secondary" type="button">Recover to checkpoint</button>
+            <button id="pause-menu-button" class="menu-secondary" type="button">Return to menu</button>
+            <div class="pause-settings" aria-label="Race settings">
+              <button id="reduced-motion-button" class="menu-toggle" type="button" aria-pressed="false">
+                <span>Reduced motion</span><b aria-hidden="true">Off</b>
+              </button>
+              <button id="reset-records-button" class="menu-danger" type="button">Reset time records</button>
+            </div>
+          </div>
+          <small>P / ESC</small>
+        </section>
+      </div>
+
       <div id="results-overlay" class="results-overlay" hidden>
         <section id="results-screen" class="results-screen" role="dialog" aria-modal="true" aria-labelledby="results-title">
-          <span class="results-kicker">Race complete</span>
+          <span id="results-kicker" class="results-kicker">Race complete</span>
           <h1 id="results-title">FINISH!</h1>
-          <div class="result-placement">
-            <span>You placed</span>
-            <strong id="result-position">1ST</strong>
-            <small id="result-field">OF 4 RACERS</small>
+          <div id="quick-race-results" class="quick-race-results">
+            <div class="result-placement">
+              <span>You placed</span>
+              <strong id="result-position">1ST</strong>
+              <small id="result-field">OF 4 RACERS</small>
+            </div>
+            <div class="result-best-lap"><span>Best lap</span><strong id="result-quick-best-lap">--:--.---</strong></div>
           </div>
           <div class="result-time">
-            <span>Final time</span>
+            <span id="result-time-label">Final time</span>
             <strong id="result-time">00:00.000</strong>
           </div>
-          <button id="restart-button" type="button">
-            <span aria-hidden="true">↻</span>
-            Race again
-          </button>
-          <p>Enter / Space</p>
+          <div id="time-trial-results" class="time-trial-results" hidden>
+            <div><span>Best lap</span><strong id="result-best-lap">--:--.---</strong></div>
+            <div><span>Previous record</span><strong id="result-previous-record">--:--.---</strong></div>
+            <p id="result-record-banner" role="status" aria-live="polite" hidden>New personal best!</p>
+          </div>
+          <div class="results-actions">
+            <button id="restart-button" class="menu-primary" type="button"><span aria-hidden="true">↻</span> Retry</button>
+            <button id="results-other-course-button" class="menu-secondary" type="button">Other course</button>
+            <button id="results-menu-button" class="menu-quiet" type="button">Menu</button>
+          </div>
+          <p>Enter / Space to retry</p>
         </section>
       </div>
 

@@ -101,6 +101,31 @@ export class AudioSystem {
     this.tone(170, 0.18, 0.045, 'sawtooth', 420);
   }
 
+  driftBoost(charge = 0.5): void {
+    const amount = Math.min(1, Math.max(0.15, charge));
+    this.noiseBurst(0.12 + amount * 0.1, 0.035 + amount * 0.04, 900 + amount * 700);
+    this.tone(210 + amount * 70, 0.16 + amount * 0.08, 0.045 + amount * 0.025, 'triangle', 460 + amount * 220);
+  }
+
+  interaction(kind: 'boost-gate' | 'drift-gate', success: boolean): void {
+    if (!success) {
+      this.tone(150, 0.13, 0.045, 'square', 92);
+      return;
+    }
+    if (kind === 'boost-gate') {
+      this.noiseBurst(0.18, 0.05, 1450);
+      this.chord([620, 930], 0.2, 0.055, 'triangle');
+    } else {
+      this.chord([420, 630, 840], 0.24, 0.052, 'sawtooth');
+    }
+  }
+
+  landing(intensity = 0.5): void {
+    const amount = Math.min(1, Math.max(0.1, intensity));
+    this.noiseBurst(0.05 + amount * 0.08, 0.025 + amount * 0.045, 520 + amount * 420);
+    this.tone(88 - amount * 14, 0.09, 0.025 + amount * 0.025, 'sine', 54);
+  }
+
   reset(): void {
     const context = this.runningContext();
     if (!context) return;
@@ -117,6 +142,21 @@ export class AudioSystem {
   toggleMuted(): boolean {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  async setPaused(paused: boolean): Promise<void> {
+    if (!this.context) return;
+    try {
+      if (paused && this.context.state === 'running') await this.context.suspend();
+      else if (!paused && this.context.state === 'suspended') await this.context.resume();
+    } catch {
+      // Audio suspension is advisory; gameplay pause must remain reliable.
+    }
   }
 
   dispose(): void {

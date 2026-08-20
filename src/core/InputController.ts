@@ -29,8 +29,16 @@ export class InputController {
 
   private boostDown = false;
   private restartQueued = false;
+  private pauseQueued = false;
+  private recoveryQueued = false;
+  private raceInputEnabled = true;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (this.raceInputEnabled && !event.repeat && (event.code === 'KeyP' || event.code === 'Escape')) {
+      this.pauseQueued = true;
+    }
+    if (target?.closest('button, a, input, select, textarea') || !this.raceInputEnabled) return;
     if (
       event.code === 'Space' ||
       event.code.startsWith('Arrow') ||
@@ -46,6 +54,7 @@ export class InputController {
     if (!event.repeat && (event.code === 'KeyR' || event.code === 'Enter')) {
       this.restartQueued = true;
     }
+    if (!event.repeat && event.code === 'KeyX') this.recoveryQueued = true;
   };
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
@@ -155,6 +164,28 @@ export class InputController {
     const queued = this.restartQueued;
     this.restartQueued = false;
     return queued;
+  }
+
+  consumePause(): boolean {
+    const queued = this.pauseQueued;
+    this.pauseQueued = false;
+    return queued;
+  }
+
+  consumeRecovery(): boolean {
+    const queued = this.recoveryQueued;
+    this.recoveryQueued = false;
+    return queued;
+  }
+
+  setRaceInputEnabled(enabled: boolean): void {
+    this.raceInputEnabled = enabled;
+    if (!enabled) {
+      this.keys.clear();
+      this.boostDown = false;
+      this.pointer.set(0, 0);
+      this.updateKnob();
+    }
   }
 
   snapshot(): RaceIntent {

@@ -10,7 +10,8 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true;
+  // Mobile's cel bands and dark hull bases retain form without a costly shadow pass.
+  renderer.shadowMap.enabled = !window.matchMedia('(pointer: coarse)').matches;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   return renderer;
 }
@@ -37,4 +38,3 @@ export function resizeRenderer(
 
   return needsResize;
 }
-

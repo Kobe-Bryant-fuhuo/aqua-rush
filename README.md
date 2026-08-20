@@ -1,6 +1,6 @@
 # Aqua Rush
 
-Aqua Rush is a small, complete cel-shaded arcade boat racing game built with Vite, Three.js, TypeScript, and ES modules. It contains one three-lap circuit, a player boat, three AI rivals, ordered checkpoint validation, a race countdown, live position/lap/time/boost HUD, results, and instant restart.
+Aqua Rush V3 is a complete cel-shaded arcade boat racing game built with Vite, Three.js, TypeScript, and ES modules. It has exactly two courses and two modes: race three rivals in Quick Race, or chase persistent per-course records in solo Time Trial. Both modes use three laps, directional checkpoint planes, open-water navigation, shared CPU/GPU wave truth, course interactions, responsive desktop/mobile UI, pause/recovery, results, and fast retry.
 
 ## Run the game
 
@@ -29,42 +29,52 @@ The preview server uses <http://127.0.0.1:4188>.
 | `W` / Up arrow | Accelerate |
 | `S` / Down arrow | Brake, then reverse |
 | `A` / `D` or Left / Right arrows | Steer |
-| Hold `Space` | Boost with looser drift grip |
+| Hold `Space` while straight | Ordinary Boost |
+| Hold `Space` while steering | Drift and build charge; release for a clean mini-boost |
+| `P` / `Escape` | Pause or resume |
 | `R` or `Enter` | Restart the race |
-| Touch stick / Boost button | Mobile steering, throttle, reverse, and boost |
+| `X` | Recover at the last valid sector |
+| `F` | Toggle fullscreen |
+| Pause / music HUD buttons | Pause/resume and mute/unmute |
+| Touch stick / Boost button | Mobile steering, throttle, reverse, drift, and boost |
 
 Audio unlocks on the first keyboard or pointer gesture. If Web Audio is unavailable, the race continues silently.
 
 ## Game design contract
 
-- **Player promise:** pilot a bright anime-inspired racing boat through a compact, readable ocean circuit.
+- **Player promise:** pilot the bright yellow hero boat across a large readable ocean, choosing clean lines and optional reward gates without being trapped by invisible walls.
 - **Target feeling:** fast, responsive, forgiving, and competitive rather than physically realistic.
 - **Primary verb:** steer a clean racing line. Secondary verbs are braking/reversing and timing drift-boost bursts.
-- **Objective:** pass seven ordered checkpoints for each of three laps and finish ahead of three rivals.
-- **Pressure:** distinct AI pace profiles, a boost resource, boat/boat contact, course boundaries, a fast straight, a wide turn, an S bend, and a tighter turn.
-- **Reward:** improved placement and a lower final race time, reinforced by HUD, VFX, camera, and audio feedback.
+- **Objective:** pass all 12 ordered directional sectors for each of three laps. Quick Race adds three rivals; Time Trial adds best-lap, best-total, PB, and new-record pressure.
+- **Pressure:** distinct AI profiles, directional swell, a boost resource, boat/boat contact, visible rocks, Storm Reef's channel/hairpin/chicane, and choosing whether a reward line is worth the risk.
+- **Reward:** placement or persistent record improvement, plus Boost Gates and drift-validated Drift Gates reinforced by HUD, VFX, camera, and synthesized audio.
 - **Setback/retry:** collisions scrub speed instead of ending the race. The finish screen and `R`/`Enter` provide a fast full reset.
 - **Skill expression:** hold the fastest line, anticipate turns, avoid contact, and spend boost where the reduced grip is manageable.
-- **Non-goals:** infinite water, rigid-body hydrodynamics, advanced foam/depth rendering, minimap, split times, upgrades, online play, and multiple courses.
+- **Non-goals:** infinite/projected-grid water, rigid-body hydrodynamics, career progression, online play, weapons, ghosts, cinematic story scenes, or more than two courses.
 
 Core loop:
 
-> Accelerate, steer, and boost to clear ordered checkpoints while AI rivals and course geometry create pressure; clean lines improve placement and time, while collisions cost speed before a quick finish/restart loop.
+> Choose a mode and course, accelerate across open water, follow the wave-bound guide, clear every directional sector, use optional Boost/Drift Gates, then improve placement or a persistent record before retrying or switching courses.
 
-## Track plan
+## Courses and modes
 
-The closed Catmull-Rom circuit starts on a readable straight under the start gate. It opens into a wide recovery turn, introduces a chicane/S bend, and then tightens before returning to the line. Paired buoys define the legal corridor, checkpoint gates communicate progress, the racing-line strip previews the route, and islands/clouds/fog hide the finite ocean edge.
+- **Sunset Circuit:** warm sunset water, green islands, a lighthouse, spectator boats, flags, broad sweepers, and forgiving optional lines.
+- **Storm Reef:** cold overcast water, stronger cross-swell, rocky channel, hairpin, broad sweeper, closing chicane, rock arch, warning lights, wreck silhouettes, and a risky reward line.
+- **Quick Race:** player plus KAI, MIRA, and NOX; three laps; placement results.
+- **Time Trial:** player only; three laps; current/best lap, best total, PB comparison, new-record results, and versioned local persistence.
+
+The ocean is finite: roughly 800×800 units are playable and 1200×1200 are visible through near/mid/far LOD. Leaving the recommended line never causes a corridor collision, forced slowdown, or automatic teleport. Race legality comes only from ordered, back-to-front directional checkpoint crossings. Use `X` or the Pause menu Recovery action when desired.
 
 ## Architecture
 
 - `src/core`: render loop, renderer sizing/DPR, and unified keyboard/touch input.
-- `src/game`: game orchestration, closed track projection, race phase, checkpoints, laps, placement, and deterministic QA hooks.
-- `src/entities`: shared arcade boat motion, the player, and look-ahead AI racers with light rubber-banding.
-- `src/assets`: shared toon materials, authored procedural boats, shader ocean, world/course kit, and pooled VFX.
-- `src/systems`: wave sampling, collision response, spring chase camera, HUD, Web Audio synthesis, and diagnostics.
-- `tests`: race rules, real keyboard control, AI movement, bot progress/softlock checks, canvas smoke tests, and deterministic visual states.
+- `src/game`: catalog-driven content, app flow, versioned save store, directional checkpoint validation, open-water race/session rules, interactions, laps/placement, and deterministic QA hooks.
+- `src/entities`: multi-point wave-following arcade boat motion, the player, and personality-driven look-ahead AI racers with avoidance and light rubber-banding.
+- `src/assets`: shared toon materials, four procedural boat silhouettes, finite LOD shader ocean, wave-following guide, instanced gates/markers, two world kits, navigation beacon, and pooled VFX.
+- `src/systems`: shared Gerstner wave truth, persistent collision separation, spring chase camera, responsive HUD, Web Audio synthesis, and diagnostics.
+- `tests`: race rules, real keyboard control, AI movement, natural full-race bot checks, pause/mute behavior, 1920×1080 performance, canvas smoke tests, and truthful deterministic visual states.
 
-The project uses custom transform-driven arcade motion and simple collision proxies. No rigid-body physics dependency is required.
+The project uses custom transform-driven arcade motion and simple boat/visible-rock proxies. There is no race-corridor collision and no rigid-body physics dependency. See [TrackDefinition](docs/track-definition.md) and [save schema](docs/save-schema.md) for the stable data contracts.
 
 ## Verification
 
@@ -78,20 +88,37 @@ Then run:
 
 ```bash
 npm run build
-npx playwright test tests/race-flow.spec.ts --project=desktop-chrome
-npx playwright test tests/bot-playtest.spec.ts --project=desktop-chrome
+npx playwright test
 npm run verify:visual
+```
+
+For the measured production-preview performance gate, start `npm run preview`, then run in PowerShell:
+
+```powershell
+$env:PERFORMANCE_PRODUCTION_PREVIEW='1'
+$env:PLAYWRIGHT_EXTERNAL_SERVER='1'
+$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:4188'
+npx playwright test tests/performance.spec.ts --project=desktop-chrome
+```
+
+For the long natural three-lap bot:
+
+```powershell
+$env:BOT_PLAYTEST_STEPS='1400'
+$env:BOT_REQUIRE_FINISH='1'
+$env:BOT_DISABLE_BOOST='1'
+npx playwright test tests/bot-playtest.spec.ts --project=desktop-chrome
 ```
 
 With the dev server running, canvas inspection can capture deterministic states:
 
 ```bash
-npm run inspect:canvas -- --state active-play --seed 217
-npm run inspect:canvas -- --mobile --state active-play --seed 217
+npm run inspect:canvas -- --state active-play --seed 20260819 --drive-active
+npm run inspect:canvas -- --mobile --state active-play --seed 20260819 --drive-active
 npm run inspect:canvas -- --state complete --seed 217
 ```
 
-The runtime publishes `window.__THREE_GAME_DIAGNOSTICS__` for renderer, race, racer, collision, input, canvas, and progress evidence. Test-only state helpers live under `window.__THREE_GAME_TEST_HOOKS__`; they do not appear in the player UI.
+The runtime publishes `window.__THREE_GAME_DIAGNOSTICS__` for flow/session, renderer, ocean LOD, race validation, guide/recovery, interactions, persistence, racers, collisions, input, and canvas evidence. Test-only helpers live under `window.__THREE_GAME_TEST_HOOKS__`; they do not appear in the player UI.
 
 ## Asset credits and licences
 
