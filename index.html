@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#116b93" />
-    <meta name="description" content="A colorful cel-shaded arcade boat racing game." />
+    <meta name="description" content="飞跃泄洪坝、夜航沉城、探索失落环礁。Aqua Rush 全新水上竞速。" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><text y='52' font-size='52'>🌊</text></svg>" />
     <title>Aqua Rush — Arcade Boat Racing</title>
   </head>
@@ -20,31 +20,31 @@
             <h1 id="title-heading">AQUA <b>RUSH</b></h1>
             <strong>V3</strong>
           </div>
-          <p>Chase the racing line. Own the open water.</p>
+          <p>越过堤墙。潜入夜色。<br>把海面，开成你的路。</p>
           <button id="title-start-button" class="menu-primary flow-primary" type="button" disabled>Start racing</button>
-          <small>Keyboard, gamepad-style touch controls</small>
+          <small>WASD 驾驶 · 弯中按住 SPACE 漂移，出弯松开 · 直线按 SPACE 增压</small>
         </section>
 
         <section id="mode-select-screen" class="flow-screen mode-select-screen" role="dialog" aria-modal="true" aria-labelledby="mode-select-title" hidden>
           <header class="flow-heading">
-            <span class="flow-eyebrow">Choose your challenge</span>
-            <h2 id="mode-select-title">Race mode</h2>
+            <span class="flow-eyebrow">PICK YOUR PACE</span>
+            <h2 id="mode-select-title">以你的方式出发</h2>
           </header>
           <div class="mode-card-grid" role="group" aria-label="Race modes">
             <button id="mode-quick-race-button" class="selection-card mode-card" type="button" data-mode="quick-race">
               <span class="selection-index" aria-hidden="true">01</span>
-              <span class="selection-copy"><strong>Quick Race</strong><small>Four racers · three laps</small></span>
+              <span class="selection-copy"><strong>Quick Race</strong><small>与三名对手争夺水道</small></span>
               <span class="selection-glyph" aria-hidden="true">◆◆◆◆</span>
             </button>
             <button id="mode-time-trial-button" class="selection-card mode-card" type="button" data-mode="time-trial">
               <span class="selection-index" aria-hidden="true">02</span>
-              <span class="selection-copy"><strong>Time Trial</strong><small>Solo run · beat your records</small></span>
+              <span class="selection-copy"><strong>Time Trial</strong><small>独自练线，刷新每一圈</small></span>
               <span class="selection-glyph" aria-hidden="true">◷</span>
             </button>
           </div>
           <button id="mode-online-button" class="selection-card mode-card online-mode-card" type="button">
             <span class="selection-index" aria-hidden="true">03</span>
-            <span class="selection-copy"><strong>Online Race</strong><small>Room codes · 2–4 friends · three laps</small></span>
+            <span class="selection-copy"><strong>Online Race</strong><small>2–4 人房间 · 一起出发</small></span>
             <span class="selection-glyph" aria-hidden="true">↗</span>
           </button>
           <button id="mode-back-button" class="menu-quiet flow-back" type="button"><span aria-hidden="true">‹</span> Back</button>
@@ -53,12 +53,13 @@
         <section id="course-select-screen" class="flow-screen course-select-screen" role="dialog" aria-modal="true" aria-labelledby="course-select-title" hidden>
           <header class="flow-heading">
             <span id="course-mode-label" class="flow-eyebrow">Quick Race</span>
-            <h2 id="course-select-title">Choose a course</h2>
+            <h2 id="course-select-title">下一站，哪里？</h2>
           </header>
           <div class="course-card-grid" role="group" aria-label="Racing courses"></div>
+          <aside id="course-detail" class="course-detail"><span id="course-subtitle">BREAKWATER</span><h3 id="course-display-name">断潮坝</h3><p id="course-description"></p><div id="course-mechanics"></div><button id="course-race-button" class="menu-primary" type="button">驶入赛场 <span>↗</span></button></aside>
           <div class="course-select-actions">
             <button id="course-back-button" class="menu-quiet flow-back" type="button"><span aria-hidden="true">‹</span> Modes</button>
-            <p>Pass every checkpoint in order. The guide line shows the route, not a wall.</p>
+            <p>沿检查点推进，路线由你选择。</p>
           </div>
         </section>
       </div>
@@ -111,7 +112,7 @@
         </div>
 
         <div class="boost-cluster" aria-label="Boost status">
-          <div class="boost-heading"><span>Boost</span><b id="boost-label">Ready</b></div>
+          <div class="boost-heading"><span>Boost <i id="skill-chain-label" aria-label="技巧连段"></i></span><b id="boost-label">Ready</b></div>
           <div class="boost-meter"><i id="boost-fill"></i><span></span><span></span><span></span></div>
           <small>SPACE</small>
         </div>

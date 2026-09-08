@@ -38,9 +38,9 @@ test('room enforces capacity, host ownership and ready/loading barriers without 
   expect(session.dispatch(seats[1].playerId, { type: 'start' }, 0)).toContain('host');
   expect(session.dispatch(seats[0].playerId, { type: 'start' }, 0)).toContain('ready');
   for (const seat of seats) session.dispatch(seat.playerId, { type: 'ready', ready: true }, 0);
-  session.dispatch(seats[0].playerId, { type: 'track', trackId: 'sunset-circuit' }, 0);
+  session.dispatch(seats[0].playerId, { type: 'track', trackId: 'breakwater' }, 0);
   expect(session.snapshot().players.every((player) => player.ready)).toBe(true);
-  session.dispatch(seats[0].playerId, { type: 'track', trackId: 'storm-reef' }, 0);
+  session.dispatch(seats[0].playerId, { type: 'track', trackId: 'nightfall' }, 0);
   expect(session.snapshot().players.every((player) => !player.ready)).toBe(true);
   for (const seat of seats) session.dispatch(seat.playerId, { type: 'ready', ready: true }, 0);
   session.dispatch(seats[0].playerId, { type: 'start' }, 0);
@@ -99,7 +99,7 @@ test('protocol rejects malformed, non-finite and forged position/finish messages
 
 test('headless state restoration reproduces drifting and wave feedback without registering an AI neighbour', () => {
   const count = ArcadeBoat.getActiveBoats().size;
-  const simulation = new OnlineSimulation('storm-reef', players.slice(0, 2));
+  const simulation = new OnlineSimulation('nightfall', players.slice(0, 2));
   const boat = simulation.boats.get(players[0].id)!;
   const clone = new ArcadeBoat('clone', '#ffcc32', null);
   const intent = { throttle: 1, steer: 0.68, boost: true };
@@ -121,7 +121,7 @@ test('headless state restoration reproduces drifting and wave feedback without r
   simulation.dispose();
 });
 
-for (const track of ['sunset-circuit', 'storm-reef'] as const) {
+for (const track of ['breakwater', 'nightfall'] as const) {
   test(`${track}: four racers complete legal three-lap crossings without the first finisher ending the match`, () => {
     const simulation = new OnlineSimulation(track, players);
     simulation.race.startImmediately([...simulation.boats.values()].map((boat) => ({ id: boat.id, position: boat.group.position, velocity: boat.velocity })), simulation.track);
@@ -143,7 +143,7 @@ for (const track of ['sunset-circuit', 'storm-reef'] as const) {
 }
 
 test('recovery neither refills boost nor grants checkpoints and is rate limited', () => {
-  const simulation = new OnlineSimulation('sunset-circuit', players.slice(0, 2));
+  const simulation = new OnlineSimulation('breakwater', players.slice(0, 2));
   simulation.race.startImmediately([], simulation.track);
   const boat = simulation.boats.get(players[0].id)!;
   boat.boost = 0.12;

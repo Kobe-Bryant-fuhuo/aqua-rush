@@ -1713,16 +1713,16 @@ button:focus-visible {
 .course-card-grid { max-height: 62vh; overflow-y: auto; padding: 5px; }
 .course-art svg { width: 100%; height: 100%; padding: 14px; position: relative; z-index: 1; }
 .course-art polygon { fill: rgba(10, 30, 50, .25); stroke: #e3ffff; stroke-width: 3; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.course-card[data-track="neon-leviathan"] .course-art { background: linear-gradient(145deg, #25134d, #11758a); }
-.course-card[data-track="caldera-throat"] .course-art { background: linear-gradient(145deg, #241f31, #a94324); }
-.course-card[data-track="storm-needle"] .course-art { background: linear-gradient(145deg, #122437, #54798a); }
+.course-card[data-track="nightfall"] .course-art { background: linear-gradient(145deg, #25134d, #11758a); }
+.course-card[data-track="breakwater"] .course-art { background: linear-gradient(145deg, #241f31, #a94324); }
+.course-card[data-track="sunken-temple"] .course-art { background: linear-gradient(145deg, #122437, #54798a); }
 
-.course-card[data-track="neon-leviathan"] .course-art::before,
-.course-card[data-track="neon-leviathan"] .course-art::after,
-.course-card[data-track="caldera-throat"] .course-art::before,
-.course-card[data-track="caldera-throat"] .course-art::after,
-.course-card[data-track="storm-needle"] .course-art::before,
-.course-card[data-track="storm-needle"] .course-art::after { display: none; }
+.course-card[data-track="nightfall"] .course-art::before,
+.course-card[data-track="nightfall"] .course-art::after,
+.course-card[data-track="breakwater"] .course-art::before,
+.course-card[data-track="breakwater"] .course-art::after,
+.course-card[data-track="sunken-temple"] .course-art::before,
+.course-card[data-track="sunken-temple"] .course-art::after { display: none; }
 @media (min-width: 1000px) {
   .course-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
   .course-card { min-height: 200px; padding-bottom: 12px; }
@@ -1734,3 +1734,90 @@ button:focus-visible {
 }
 
 .course-card[data-experimental="true"] .course-meta i { display: inline; }
+
+#course-feature { position: absolute; top: 130px; left: 18px; max-width: 300px; background: #08172cda; border-left: 3px solid #d18aff; padding: 10px 14px; pointer-events: none; }
+#course-feature strong { display: block; font-size: 14px; color: #ffe17e; }
+#course-feature span { display: block; margin-top: 5px; font-size: 11px; color: #c6e9fa; line-height: 1.5; }
+@media (max-width: 700px) { #course-feature { top: 118px; left: 9px; max-width: 220px; padding: 7px 10px; } #course-feature strong { font-size: 11px; } #course-feature span { font-size: 9px; } }
+@media (max-height: 500px) { #course-feature { top: 94px; max-width: 210px; padding: 5px 8px; } #course-feature span { display: none; } }
+
+/* New world controls use the same arcade palette, cut corners and type hierarchy. */
+.course-card-grid { max-height: 44vh; }
+.course-detail {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 24px;
+  margin-top: 16px;
+  padding: 16px 22px;
+  border-top: 4px solid var(--cyan);
+  background: var(--ink);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+#course-subtitle {
+  color: var(--cyan);
+  font-size: .6rem;
+  font-weight: 950;
+  letter-spacing: .16em;
+}
+.course-detail h3 {
+  margin: 0;
+  color: var(--sun);
+  font-size: 1.6rem;
+  font-style: italic;
+  font-weight: 1000;
+}
+.course-detail p {
+  margin: 0;
+  color: var(--cream);
+  font-size: .72rem;
+  line-height: 1.5;
+}
+#course-mechanics {
+  color: var(--cyan);
+  font-size: .62rem;
+  font-weight: 850;
+  line-height: 1.5;
+}
+#course-subtitle, .course-detail h3, .course-detail p, #course-mechanics { grid-column: 1; }
+#course-race-button {
+  grid-column: 2;
+  grid-row: 1 / 5;
+  align-self: center;
+  min-width: 160px;
+  min-height: 48px;
+}
+#race-minimap {
+  position: absolute;
+  top: calc(var(--safe-top) + 120px);
+  right: var(--safe-right);
+  width: 124px;
+  height: 124px;
+  padding: 9px;
+  border-top: 3px solid var(--cyan);
+  background: var(--ink-soft);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+#race-minimap polygon { fill: none; stroke: var(--cream); stroke-width: 5; stroke-linejoin: round; }
+#race-minimap .map-target { fill: var(--cyan); }
+#race-minimap .map-player { fill: var(--sun); stroke: var(--ink); stroke-width: 3; }
+#skill-chain-label { color: var(--sun); font-style: italic; font-weight: 1000; }
+.turn-feedback.is-draft-ready { color: var(--sun); filter: drop-shadow(0 0 7px var(--cyan)); }
+#course-feature { background: var(--ink-soft); border-left-color: var(--cyan); }
+#course-feature strong { color: var(--sun); font-style: italic; font-weight: 950; }
+#course-feature span { color: var(--cream); }
+@media (max-width: 700px) {
+  .course-card-grid { max-height: 32vh; }
+  .course-detail { grid-template-columns: 1fr; padding: 13px 16px; gap: 5px; }
+  .course-detail h3 { font-size: 1.3rem; }
+  .course-detail p { font-size: .65rem; }
+  #course-race-button { grid-column: 1; grid-row: auto; margin-top: 7px; width: 100%; }
+  #race-minimap { top: calc(var(--safe-top) + 168px); width: 88px; height: 88px; padding: 5px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .course-card-grid { max-height: 40vh; }
+  .course-detail { grid-template-columns: 1fr auto; padding: 10px 16px; }
+  .course-detail h3 { font-size: 1.2rem; }
+  .course-detail p { display: none; }
+  #course-race-button { grid-column: 2; grid-row: 1 / 5; width: auto; margin: 0; }
+  #race-minimap { top: calc(var(--safe-top) + 105px); width: 80px; height: 80px; }
+}

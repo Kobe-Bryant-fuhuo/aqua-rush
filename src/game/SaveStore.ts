@@ -1,9 +1,10 @@
-import { TRACK_IDS, isTrackId, type RaceMode, type TrackId } from './ContentCatalog';
+import { TRACK_IDS, isTrackId, getTrackDefinition, type RaceMode, type TrackId } from './ContentCatalog';
 
 export const SAVE_SCHEMA_VERSION = 1 as const;
 export const SAVE_STORAGE_KEY = 'aqua-rush-v3';
 
 export type TimeTrialRecord = {
+  rulesRevision?: number;
   bestLap: number | null;
   bestTotal: number | null;
 };
@@ -19,6 +20,7 @@ export type SaveData = {
     trackId: TrackId;
   };
   timeTrial: Record<TrackId, TimeTrialRecord>;
+  archivedTimeTrial?: Record<string, TimeTrialRecord>;
 };
 
 export type SaveLoadResult = {
@@ -30,9 +32,14 @@ export type SaveLoadResult = {
 const defaults = (): SaveData => ({
   version: SAVE_SCHEMA_VERSION,
   settings: { muted: false, reducedMotion: false },
-  lastSelection: { mode: 'quick-race', trackId: 'sunset-circuit' },
-  timeTrial: Object.fromEntries(TRACK_IDS.map(id => [id, { bestLap: null, bestTotal: null }])) as SaveData['timeTrial'],
+  lastSelection: { mode: 'quick-race', trackId: 'breakwater' },
+  timeTrial: Object.fromEntries(TRACK_IDS.map(id => [id, emptyRecord(id)])) as SaveData['timeTrial'],
 });
+
+function emptyRecord(id: TrackId): TimeTrialRecord {
+  const revision = getTrackDefinition(id).rulesRevision;
+  return { bestLap: null, bestTotal: null, ...(revision ? { rulesRevision: revision } : {}) };
+}
 
 function positiveTime(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
@@ -59,9 +66,40 @@ export class SaveStore {
     try {
       const parsed = JSON.parse(raw) as Partial<SaveData>;
       if (parsed.version !== SAVE_SCHEMA_VERSION) repaired = true;
+      const archived: Record<string, TimeTrialRecord> = {};
+      const legacy = parsed.timeTrial as Record<string, TimeTrialRecord> | undefined;
+      for (const id of ['sunset-circuit', 'storm-reef', 'neon-leviathan', 'caldera-throat', 'storm-needle']) {
+        for (const revision of [1, 2]) {
+          const key = id + '@' + revision, record = parsed.archivedTimeTrial?.[key];
+          if (record) archived[key] = { bestLap: positiveTime(record.bestLap), bestTotal: positiveTime(record.bestTotal), rulesRevision: revision };
+        }
+        const record = legacy?.[id];
+        if (record) {
+          const revision = record.rulesRevision === 2 ? 2 : 1;
+          archived[id + '@' + revision] = { bestLap: positiveTime(record.bestLap), bestTotal: positiveTime(record.bestTotal), rulesRevision: revision };
+          repaired = true;
+        }
+      }
+      const timeTrial = Object.fromEntries(TRACK_IDS.map(id => {
+        const revision = getTrackDefinition(id).rulesRevision ?? 1;
+        for (let previous = 1; previous < revision; previous++) {
+          const key = id + '@' + previous, record = parsed.archivedTimeTrial?.[key];
+          if (record) archived[key] = { bestLap: positiveTime(record.bestLap), bestTotal: positiveTime(record.bestTotal), rulesRevision: previous };
+        }
+        const stored = parsed.timeTrial?.[id];
+        const storedRevision = stored?.rulesRevision ?? 1;
+        if (stored && storedRevision !== revision) {
+          if (Number.isSafeInteger(storedRevision) && storedRevision > 0 && storedRevision < revision) {
+            archived[id + '@' + storedRevision] = { bestLap: positiveTime(stored.bestLap), bestTotal: positiveTime(stored.bestTotal), rulesRevision: storedRevision };
+          }
+          repaired = true;
+          return [id, emptyRecord(id)];
+        }
+        return [id, { ...emptyRecord(id), bestLap: positiveTime(stored?.bestLap), bestTotal: positiveTime(stored?.bestTotal) }];
+      })) as SaveData['timeTrial'];
       {
         const mode = parsed.lastSelection?.mode === 'time-trial' ? 'time-trial' : 'quick-race';
-        const trackId = isTrackId(parsed.lastSelection?.trackId) ? parsed.lastSelection.trackId : 'sunset-circuit';
+        const trackId = isTrackId(parsed.lastSelection?.trackId) ? parsed.lastSelection.trackId : 'breakwater';
         this.data = {
           version: SAVE_SCHEMA_VERSION,
           settings: {
@@ -69,10 +107,8 @@ export class SaveStore {
             reducedMotion: Boolean(parsed.settings?.reducedMotion),
           },
           lastSelection: { mode, trackId },
-          timeTrial: Object.fromEntries(TRACK_IDS.map(id => [id, {
-            bestLap: positiveTime(parsed.timeTrial?.[id]?.bestLap),
-            bestTotal: positiveTime(parsed.timeTrial?.[id]?.bestTotal),
-          }])) as SaveData['timeTrial'],
+          timeTrial,
+          ...(Object.keys(archived).length ? { archivedTimeTrial: archived } : {}),
         };
       }
     } catch {
@@ -114,6 +150,7 @@ export class SaveStore {
 
   resetRecords(): void {
     this.data.timeTrial = defaults().timeTrial;
+    delete this.data.archivedTimeTrial;
     this.flush();
   }
 

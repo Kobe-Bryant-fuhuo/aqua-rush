@@ -41,8 +41,6 @@ export class AIRacer extends ArcadeBoat {
       maxForwardSpeed: DEFAULT_PLAYER_TUNING.maxForwardSpeed * profile.speedScale,
       boostedMaxSpeed: DEFAULT_PLAYER_TUNING.boostedMaxSpeed * 0.9 * profile.speedScale,
       turnRate: DEFAULT_PLAYER_TUNING.turnRate * profile.steeringScale,
-      boostDrain: 0,
-      boostRecharge: 0,
     };
   }
 
@@ -82,6 +80,16 @@ export class AIRacer extends ArcadeBoat {
     const expectedCheckpoint = track.getCheckpoint(nextCheckpointIndex);
     const checkpointDelta = (expectedCheckpoint.definition.progress - projection.progress + 1) % 1;
     if (checkpointDelta * track.length < 45) this.target.copy(expectedCheckpoint.center).addScaledVector(expectedCheckpoint.normal, 4);
+    // A missed/slow jump takes the visible water bypass instead of pushing into the low wall.
+    for (const block of track.mechanics.blocks) {
+      if (!block.onRoute || this.flightActive || this.speed > 14) continue;
+      this.toOther.copy(block.center).sub(this.group.position).setY(0);
+      const ahead = this.toOther.dot(block.forward), lateral = this.toOther.dot(block.right);
+      if (ahead > -2 && ahead < 22 && Math.abs(lateral) < block.width / 2 + 2) {
+        this.target.copy(block.center).addScaledVector(block.right, (desiredLane < 0 ? -1 : 1) * (block.width / 2 + 4)).addScaledVector(block.forward, -4);
+      }
+    }
+    track.mechanics.avoidCrossing(this.group.position, this.speed, elapsed, this.target);
     this.toTarget.copy(this.target).sub(this.group.position).setY(0);
     const desiredHeading = Math.atan2(this.toTarget.x, -this.toTarget.z);
     const headingError = Math.atan2(Math.sin(desiredHeading - this.heading), Math.cos(desiredHeading - this.heading));
@@ -107,10 +115,11 @@ export class AIRacer extends ArcadeBoat {
     this.intent.throttle = THREE.MathUtils.clamp((cornerThrottle + rubberBand + rhythm + aggression) * track.definition.ai.speedScale, 0.54, 1);
     // Brake into large heading errors instead of orbiting a missed narrow sector at full throttle.
     if (Math.abs(headingError) > .7 && this.speed > 9) this.intent.throttle = -.25;
-    const deficit = playerRaceScore - ownRaceScore;
-    const boostThreshold = this.personality === 'aggressive' ? 0.1 : this.personality === 'clean' ? 0.34 : 0.2;
+    const boostThreshold = this.personality === 'aggressive' ? .18 : this.personality === 'clean' ? .5 : .32;
     const erraticBoostWindow = this.personality !== 'erratic' || Math.sin(elapsed * 0.91 + 1.2) > -0.25;
-    this.intent.boost = deficit > boostThreshold && curvature < 18 && erraticBoostWindow;
+    const driftCorner = this.speed > 14 && Math.abs(headingError) > .3 && Math.abs(headingError) < .65;
+    this.intent.boost = this.drifting ? Math.abs(headingError) > .16 && this.driftCharge < .5
+      : driftCorner || (this.boost > boostThreshold && curvature < 18 && Math.abs(headingError) < .2 && erraticBoostWindow);
 
     const originalMax = this.tuning.maxForwardSpeed;
     this.tuning.maxForwardSpeed = originalMax * (1 + rubberBand);

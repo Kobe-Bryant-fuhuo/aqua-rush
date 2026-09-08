@@ -1,10 +1,12 @@
+import type { CurrentDefinition } from './CurrentField';
+import type { RouteOption } from './RouteOptions';
 import { validateTrackDefinition } from './TrackValidation';
-import { createExperimentalTracks, type ExperimentalTrackId } from './ExperimentalMapPack';
+import { createWorlds, type TrackId } from './WorldCatalog';
+import type { BlockDefinition, RampDefinition, CrossingDefinition } from './WorldMechanics';
+export type { TrackId } from './WorldCatalog';
 import type { GerstnerWave } from '../systems/WaveSurface';
 
 export type RaceMode = 'quick-race' | 'time-trial';
-export type BaseTrackId = 'sunset-circuit' | 'storm-reef';
-export type TrackId = BaseTrackId | ExperimentalTrackId;
 export type InteractionKind = 'boost-gate' | 'drift-gate';
 
 export type WavePreset = Readonly<{
@@ -67,16 +69,15 @@ export type TimeTrialTargets = Readonly<{
   bronze: number;
 }>;
 
-export type LandmarkDefinition = Readonly<{
-  kind?: 'cargo' | 'volcano' | 'turbine';
-  id: string;
-  progress: number;
-  lateralOffset: number;
-}>;
-
 export type TrackDefinition = Readonly<{
   id: TrackId;
   experimental?: boolean;
+  rulesRevision?: number;
+  blocks?: readonly BlockDefinition[];
+  ramps?: readonly RampDefinition[];
+  crossings?: readonly CrossingDefinition[];
+  currents?: readonly CurrentDefinition[];
+  routes?: readonly RouteOption[];
   name: string;
   displayName: string;
   subtitle: string;
@@ -89,8 +90,6 @@ export type TrackDefinition = Readonly<{
   lapCount: 3;
   spawnGrid: readonly SpawnSlotDefinition[];
   markerPreset: 'sunset-race' | 'storm-warning';
-  environmentKit: 'sunset-harbor' | 'storm-reef';
-  landmarks: readonly LandmarkDefinition[];
   timeTrialTargets: TimeTrialTargets;
   controlPoints: readonly Readonly<[number, number]>[];
   checkpoints: readonly CheckpointDefinition[];
@@ -163,130 +162,18 @@ const stormEnvironment: EnvironmentPreset = {
 const sunsetWavePreset: WavePreset = { id: 'sunset-swell', waves: SUNSET_WAVES, visualStrength: 1 };
 const stormWavePreset: WavePreset = { id: 'storm-cross-swell', waves: STORM_WAVES, visualStrength: 1.55 };
 
-const standardSpawnGrid: readonly SpawnSlotDefinition[] = [
-  { progress: 0.982, lane: -1.45 },
-  { progress: 0.979, lane: 1.4 },
-  { progress: 0.969, lane: -1.4 },
-  { progress: 0.966, lane: 1.35 },
-];
-
-const checkpointSet = (width: number): readonly CheckpointDefinition[] => [
-  { id: 'sector-01', progress: 0.075, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'sector-02', progress: 0.155, halfWidth: width * 0.88, height: 5.5, visible: true, role: 'sector' },
-  { id: 'sector-03', progress: 0.235, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'sector-04', progress: 0.32, halfWidth: width * 0.9, height: 5.5, visible: true, role: 'sector' },
-  { id: 'sector-05', progress: 0.405, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'sector-06', progress: 0.49, halfWidth: width * 0.92, height: 5.5, visible: true, role: 'sector' },
-  { id: 'sector-07', progress: 0.575, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'sector-08', progress: 0.66, halfWidth: width * 0.9, height: 5.5, visible: true, role: 'sector' },
-  { id: 'sector-09', progress: 0.745, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'sector-10', progress: 0.83, halfWidth: width * 0.88, height: 5.5, visible: true, role: 'sector' },
-  { id: 'sector-11', progress: 0.915, halfWidth: width, height: 5.5, visible: false, role: 'anti-cut' },
-  { id: 'finish', progress: 0, halfWidth: width, height: 6, visible: true, role: 'finish' },
-];
-
-const BASE_TRACKS: Readonly<Record<BaseTrackId, TrackDefinition>> = {
-  'sunset-circuit': {
-    id: 'sunset-circuit',
-    name: 'Sunset Circuit',
-    displayName: 'Sunset Circuit',
-    subtitle: 'Golden water. Wide racing lines.',
-    description: 'Fast island sweepers, a lighthouse turn and forgiving open-water shortcuts that still demand every sector.',
-    difficulty: 'Breezy',
-    seed: 217,
-    halfWidth: 8.4,
-    width: 16.8,
-    buoySpacing: 20,
-    lapCount: 3,
-    spawnGrid: standardSpawnGrid,
-    markerPreset: 'sunset-race',
-    environmentKit: 'sunset-harbor',
-    landmarks: [
-      { id: 'sunset-lighthouse', progress: 0.62, lateralOffset: 54 },
-      { id: 'sunset-spectators', progress: 0.72, lateralOffset: -46 },
-    ],
-    timeTrialTargets: { gold: 66, silver: 74, bronze: 86 },
-    controlPoints: [[-8, -58], [27, -59], [52, -48], [64, -22], [58, 8], [39, 27], [14, 21], [-5, 31], [13, 44], [-2, 57], [-31, 55], [-55, 39], [-64, 12], [-59, -23], [-39, -51]],
-    checkpoints: checkpointSet(12.5),
-    interactions: [
-      { id: 'sun-boost-east', kind: 'boost-gate', progress: 0.22, lateralOffset: 1.8, halfWidth: 3.3, cooldown: 7, reward: 0.42 },
-      { id: 'sun-drift-north', kind: 'drift-gate', progress: 0.52, lateralOffset: -1.5, halfWidth: 3.5, cooldown: 7, reward: 0.55 },
-      { id: 'sun-boost-home', kind: 'boost-gate', progress: 0.86, lateralOffset: -1.1, halfWidth: 3.2, cooldown: 7, reward: 0.36 },
-    ],
-    rocks: [
-      { id: 'sun-rock-1', progress: 0.34, lateralOffset: 19, radius: 3.2, height: 3.8 },
-      { id: 'sun-rock-2', progress: 0.69, lateralOffset: -22, radius: 4.1, height: 4.8 },
-    ],
-    environment: sunsetEnvironment,
-    environmentPreset: sunsetEnvironment,
-    waves: sunsetWavePreset,
-    wavePreset: sunsetWavePreset,
-    ai: { lookAheadScale: 1, speedScale: 1, preferredLines: [1.4, -1.4, 0.15] },
-  },
-  'storm-reef': {
-    id: 'storm-reef',
-    name: 'Storm Reef',
-    displayName: 'Storm Reef',
-    subtitle: 'Cross-swell. Razor channel. Risk pays.',
-    description: 'A technical reef run through a hairpin, rocky fast channel, broad storm sweeper and closing chicane.',
-    difficulty: 'Technical',
-    seed: 903,
-    halfWidth: 9.2,
-    width: 18.4,
-    buoySpacing: 24,
-    lapCount: 3,
-    spawnGrid: standardSpawnGrid,
-    markerPreset: 'storm-warning',
-    environmentKit: 'storm-reef',
-    landmarks: [
-      { id: 'reef-rock-arch', progress: 0.56, lateralOffset: 38 },
-      { id: 'reef-wrecks', progress: 0.78, lateralOffset: -52 },
-    ],
-    timeTrialTargets: { gold: 100, silver: 112, bronze: 128 },
-    controlPoints: [[-12, -82], [34, -85], [74, -67], [88, -28], [66, -5], [35, -17], [18, 5], [52, 30], [78, 57], [43, 78], [3, 68], [-20, 44], [-55, 66], [-88, 42], [-78, 5], [-94, -28], [-61, -60]],
-    checkpoints: checkpointSet(13.8),
-    interactions: [
-      { id: 'reef-boost-channel', kind: 'boost-gate', progress: 0.18, lateralOffset: 2.4, halfWidth: 3.1, cooldown: 8, reward: 0.46 },
-      { id: 'reef-drift-hairpin', kind: 'drift-gate', progress: 0.4, lateralOffset: -1.7, halfWidth: 3.4, cooldown: 8, reward: 0.62 },
-      { id: 'reef-risk-boost', kind: 'boost-gate', progress: 0.7, lateralOffset: 6.4, halfWidth: 2.6, cooldown: 9, reward: 0.58 },
-      { id: 'reef-drift-chicane', kind: 'drift-gate', progress: 0.9, lateralOffset: 0.8, halfWidth: 3.2, cooldown: 8, reward: 0.56 },
-    ],
-    rocks: [
-      { id: 'reef-rock-1', progress: 0.12, lateralOffset: 10.5, radius: 4.4, height: 6.2 },
-      { id: 'reef-rock-2', progress: 0.2, lateralOffset: -11, radius: 5.1, height: 7.4 },
-      { id: 'reef-rock-3', progress: 0.43, lateralOffset: 12, radius: 4.8, height: 6.7 },
-      { id: 'reef-rock-4', progress: 0.68, lateralOffset: 9.5, radius: 3.7, height: 5.2 },
-      { id: 'reef-rock-5', progress: 0.72, lateralOffset: 3.3, radius: 3.2, height: 4.8 },
-      { id: 'reef-rock-6', progress: 0.93, lateralOffset: -10.8, radius: 4.5, height: 6.5 },
-    ],
-    environment: stormEnvironment,
-    environmentPreset: stormEnvironment,
-    waves: stormWavePreset,
-    wavePreset: stormWavePreset,
-    ai: { lookAheadScale: 1.08, speedScale: 0.97, preferredLines: [1.2, -1.7, 0.4] },
-  },
-} as const;
-
-const experiments = createExperimentalTracks(BASE_TRACKS['sunset-circuit'], BASE_TRACKS['storm-reef']);
-export const TRACK_CATALOG = Object.freeze(Object.fromEntries([
-  ...Object.entries(BASE_TRACKS), ...experiments.map(track => [track.id, track]),
-])) as Readonly<Record<TrackId, TrackDefinition>>;
+export const TRACK_CATALOG = Object.freeze(createWorlds(sunsetEnvironment, stormEnvironment, sunsetWavePreset, stormWavePreset));
 Object.values(TRACK_CATALOG).forEach(validateTrackDefinition);
-export const ONLINE_TRACK_IDS: readonly BaseTrackId[] = ['sunset-circuit', 'storm-reef'];
+export const TRACK_IDS = Object.freeze(Object.keys(TRACK_CATALOG) as TrackId[]);
+export const ONLINE_TRACK_IDS: readonly TrackId[] = TRACK_IDS;
 export function isTrackId(value: unknown): value is TrackId {
   return typeof value === 'string' && Object.hasOwn(TRACK_CATALOG, value);
 }
-export function isOnlineTrackId(value: unknown): value is BaseTrackId {
-  return ONLINE_TRACK_IDS.some(id => id === value);
-}
-
+export const isOnlineTrackId = isTrackId;
 export function getTrackDefinition(id: TrackId): TrackDefinition {
-  if (!isTrackId(id)) throw new Error(`Unknown track: ${id}`);
+  if (!isTrackId(id)) throw new Error('Unknown course: ' + id);
   return TRACK_CATALOG[id];
 }
-
-export const TRACK_IDS = Object.freeze(Object.keys(TRACK_CATALOG) as TrackId[]);
-
 export function makeRaceConfig(mode: RaceMode, trackId: TrackId): RaceConfig {
   return { mode, trackId, totalLaps: getTrackDefinition(trackId).lapCount, aiCount: mode === 'quick-race' ? 3 : 0 };
 }

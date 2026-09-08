@@ -1,6 +1,6 @@
 # Aqua Rush
 
-Aqua Rush is a cel-shaded arcade boat racing game built with Vite, Three.js, TypeScript, and ES modules. It has five local courses (including three experimental Map Pack courses) and two online courses: race three AI rivals in Quick Race, chase persistent per-course records in solo Time Trial, or race 2–4 friends in Online Race using a room code. All modes use three laps, directional checkpoint planes, open-water navigation, shared CPU/GPU wave truth, course interactions, and responsive desktop/mobile controls.
+Aqua Rush is a cel-shaded arcade boat racing game built with Vite, Three.js, TypeScript, and ES modules. It has three rebuilt worlds, each available locally and online: race three AI rivals in Quick Race, chase persistent per-course records in solo Time Trial, or race 2–4 friends in Online Race using a room code. All modes use three laps, directional checkpoint planes, open-water navigation, shared CPU/GPU wave truth, course interactions, and responsive desktop/mobile controls.
 
 ## Run the game
 
@@ -49,15 +49,21 @@ for setup, room rules, usage limits, and verification.
 | Pause / music HUD buttons | Pause/resume and mute/unmute |
 | Touch stick / Boost button | Mobile steering, throttle, reverse, drift, and boost |
 
+Drifts charge through three tiers. Release to burst and refill boost; clean ramp landings and reward gates can continue the sequence. A chain lasts ten seconds and caps at three, raising the boosted speed ceiling from 33 to 35/37 world units per second. Significant contact breaks it. Passive recharge is slower, so the next burst depends more on your driving.
+
+In Quick Race and Online Race, stay 4–23 units behind an aligned moving rival to charge a slipstream. After 1.25 seconds, pull sideways out of the wake to receive the slingshot and boost refill. Stationary, opposing, finished and departed rivals cannot supply a draft. AI racers now spend boost and use drift releases too.
+
+Nightfall's work barges have readable open, warning, crossing and clear phases. The center line can be obstructed; the marked right-side bypass remains open. Timing the center line gives access to an exit energy gate. See [gameplay changes and measured route choices](docs/gameplay-optimization.zh-CN.md).
+
 Audio unlocks on the first keyboard or pointer gesture. If Web Audio is unavailable, the race continues silently.
 
 ## Game design contract
 
 - **Player promise:** pilot the bright yellow hero boat across a large readable ocean, choosing clean lines and optional reward gates without being trapped by invisible walls.
 - **Target feeling:** fast, responsive, forgiving, and competitive rather than physically realistic.
-- **Primary verb:** steer a clean racing line. Secondary verbs are braking/reversing and timing drift-boost bursts.
+- **Primary verb:** steer a clean racing line. Secondary verbs are braking/reversing, chaining drift releases, aligning landings, drafting rivals and timing barge crossings.
 - **Objective:** pass all 12 ordered directional sectors for each of three laps. Quick Race adds three rivals; Time Trial adds best-lap, best-total, PB, and new-record pressure.
-- **Pressure:** distinct AI profiles, directional swell, a boost resource, boat/boat contact, visible rocks, Storm Reef's channel/hairpin/chicane, and choosing whether a reward line is worth the risk.
+- **Pressure:** distinct AI profiles, directional swell, earned boost, boat/boat contact, visible waterfront architecture, timed barge crossings, ramp landings, and optional water-level bypasses.
 - **Reward:** placement or persistent record improvement, plus Boost Gates and drift-validated Drift Gates reinforced by HUD, VFX, camera, and synthesized audio.
 - **Setback/retry:** collisions scrub speed instead of ending the race. The finish screen and `R`/`Enter` provide a fast full reset.
 - **Skill expression:** hold the fastest line, anticipate turns, avoid contact, and spend boost where the reduced grip is manageable.
@@ -69,9 +75,10 @@ Core loop:
 
 ## Courses and modes
 
-- **Sunset Circuit:** warm sunset water, green islands, a lighthouse, spectator boats, flags, broad sweepers, and forgiving optional lines.
-- **Storm Reef:** cold overcast water, stronger cross-swell, rocky channel, hairpin, broad sweeper, closing chicane, rock arch, warning lights, wreck silhouettes, and a risky reward line.
-- **Experimental local courses:** 霓虹巨兽港 (Neon Leviathan), 龙喉火山 (Caldera Throat), and 风暴针眼 (Storm Needle), with new layouts, procedural landmarks, and per-racer/per-lap rewards. See [map pack review and implementation](docs/map-expansion-review.zh-CN.md).
+- **断潮坝 / Breakwater:** terraced cliffs, elevated spillways, two physical launch ramps, low seawall and a marked water-level bypass.
+- **霓虹沉城 / Nightfall:** flooded building canyons, three synchronized work-barge crossings and a metro launch ramp. Signals warn before the center is obstructed; the marked right bypass remains open.
+- **失落环礁 / Sunken Temple:** monumental stone arches, broken colonnades, a ramp over the ruin wall, and an optional current-assisted outside line.
+- See [world rebuild design and validation](docs/world-rebuild.zh-CN.md) for mechanics, research references and limits.
 - **Quick Race:** player plus KAI, MIRA, and NOX; three laps; placement results.
 - **Time Trial:** player only; three laps; current/best lap, best total, PB comparison, new-record results, and versioned local persistence.
 - **Online Race:** 2–4 human racers; room codes, shared countdown, authoritative results, short reconnect window, and return-to-lobby rematches. Pause affects only your controls; online races do not write Time Trial records.
@@ -88,7 +95,7 @@ The ocean is finite: roughly 800×800 units are playable and 1200×1200 are visi
 - `tests`: race rules, real keyboard control, AI movement, natural full-race bot checks, pause/mute behavior, 1920×1080 performance, canvas smoke tests, and truthful deterministic visual states.
 - `src/shared`, `src/network`, `server`: shared headless race simulation, client prediction/interpolation, room UI and the Cloudflare Worker/Durable Object service.
 
-The project uses custom transform-driven arcade motion and simple boat/visible-rock proxies. There is no race-corridor collision and no rigid-body physics dependency. See [TrackDefinition](docs/track-definition.md) and [save schema](docs/save-schema.md) for the stable data contracts.
+The project uses custom transform-driven arcade motion and boat/rock proxies and height-aware oriented waterfront collision boxes. There is no race-corridor collision and no rigid-body physics dependency. See [TrackDefinition](docs/track-definition.md) and [save schema](docs/save-schema.md) for the stable data contracts.
 
 ## Verification
 

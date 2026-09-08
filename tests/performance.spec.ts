@@ -12,7 +12,7 @@ import {
 
 const RUN_PRODUCTION_PERFORMANCE = process.env.PERFORMANCE_PRODUCTION_PREVIEW === '1';
 const SAMPLE_DURATION_MS = 8_400;
-const PERFORMANCE_TRACK = process.env.PERFORMANCE_TRACK ?? 'sunset-circuit';
+const PERFORMANCE_TRACK = process.env.PERFORMANCE_TRACK ?? 'breakwater';
 if (!isTrackId(PERFORMANCE_TRACK)) throw new Error(`Unknown performance course: ${PERFORMANCE_TRACK}`);
 const REPORT_PATH = resolve('artifacts', `performance-1920x1080-${PERFORMANCE_TRACK}.json`);
 
@@ -61,7 +61,7 @@ test('production preview sustains the 1920x1080 active-race performance budget',
   await callRaceHook(page, 'setReducedMotion', false);
   await callRaceHook(page, 'setPausedForScreenshot', false);
   await callRaceHook(page, 'setState', 'active-play');
-  if (PERFORMANCE_TRACK !== 'sunset-circuit') {
+  if (PERFORMANCE_TRACK !== 'breakwater') {
     await callRaceHook(page, 'selectSession', 'quick-race', PERFORMANCE_TRACK);
     await page.evaluate(() => window.advanceTime!(3100));
     await callRaceHook(page, 'setPausedForScreenshot', false);

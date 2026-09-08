@@ -4,7 +4,7 @@ import type { InteractionEvent, InteractionState } from '../game/InteractionSyst
 import type { RaceEvent, RacerRaceState, RacePhase } from '../game/RaceManager';
 import type { BoatState } from './BoatState';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 5;
 export const SIMULATION_STEP = 1 / 60;
 export const SNAPSHOT_INTERVAL_MS = 50;
 export const MAX_PLAYERS = 4;
@@ -28,7 +28,7 @@ export type RaceSnapshot = {
   countdown: number;
   raceTime: number;
   remaining: number | null;
-  racers: Array<{ id: string; ack: number; recovery: number; body: BoatState; race: RacerRaceState }>;
+  racers: Array<{ id: string; ack: number; recovery: number; dnf: boolean; body: BoatState; race: RacerRaceState }>;
   gates: Array<Omit<InteractionState, 'center'> & { center: [number, number, number] }>;
   events: Array<{ id: number; event: RaceEvent | InteractionEvent }>;
 };

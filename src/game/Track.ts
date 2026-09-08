@@ -1,5 +1,5 @@
+import { WorldMechanics } from './WorldMechanics';
 import * as THREE from 'three';
-import { landmarkFootprints } from './LandmarkFootprints';
 import { getTrackDefinition, type CheckpointDefinition, type TrackDefinition } from './ContentCatalog';
 
 export type TrackProjection = {
@@ -43,6 +43,7 @@ const CHECKPOINT_LATERAL_GRACE = 2.4;
 /** Data-driven circuit with open-water navigation and directional sector planes. */
 export class RaceTrack {
   readonly definition: TrackDefinition;
+  readonly mechanics: WorldMechanics;
   readonly curve: THREE.CatmullRomCurve3;
   readonly halfWidth: number;
   readonly checkpoints: readonly number[];
@@ -64,7 +65,7 @@ export class RaceTrack {
   private readonly crossingDelta = new THREE.Vector3();
   private readonly crossingPoint = new THREE.Vector3();
 
-  constructor(definition: TrackDefinition = getTrackDefinition('sunset-circuit')) {
+  constructor(definition: TrackDefinition = getTrackDefinition('breakwater')) {
     this.definition = definition;
     this.halfWidth = definition.halfWidth;
     this.checkpoints = definition.checkpoints.map((checkpoint) => checkpoint.progress);
@@ -95,21 +96,32 @@ export class RaceTrack {
       radius: rock.radius,
       height: rock.height,
     }));
-    for (const spec of definition.landmarks) {
-      if (!spec.kind) continue;
-      const origin = this.getOffsetPoint(spec.progress, spec.lateralOffset);
-      const tangent = this.getTangentAt(spec.progress), right = this.getRightAt(spec.progress);
-      landmarkFootprints(spec.kind).forEach((footprint, index) => rocks.push({
-        id: `landmark:${spec.id}:${index}`,
-        center: origin.clone().addScaledVector(right, footprint.x).addScaledVector(tangent, -footprint.z),
-        radius: footprint.radius, height: footprint.height,
-      }));
-    }
     this.rocks = rocks;
+    this.mechanics = new WorldMechanics(this);
   }
 
   wrapProgress(progress: number): number {
     return ((progress % 1) + 1) % 1;
+  }
+
+  /** A point on the advisory water route, with the marked bypass available after a missed jump. */
+  getDrivingTarget(position: THREE.Vector3, nextCheckpoint: number, speed: number, target = new THREE.Vector3(), elapsed = 0): THREE.Vector3 {
+    const projection = this.project(position);
+    this.getPointAt(projection.progress + (15 + Math.min(10, Math.abs(speed) * .35)) / this.length, target);
+    const checkpoint = this.getCheckpoint(nextCheckpoint);
+    if (this.wrapProgress(checkpoint.definition.progress - projection.progress) * this.length < 26) {
+      target.copy(checkpoint.center).addScaledVector(checkpoint.normal, 3);
+    }
+    for (const block of this.mechanics.blocks) {
+      if (!block.onRoute || speed > 14) continue;
+      const delta = block.center.clone().sub(position);
+      const ahead = delta.dot(block.forward), lateral = delta.dot(block.right);
+      if (ahead > -2 && ahead < 22 && Math.abs(lateral) < block.width / 2 + 2) {
+        target.copy(block.center).addScaledVector(block.right, block.width / 2 + 4).addScaledVector(block.forward, -4);
+      }
+    }
+    this.mechanics.avoidCrossing(position, speed, elapsed, target);
+    return target;
   }
 
   getPointAt(progress: number, target = new THREE.Vector3()): THREE.Vector3 {

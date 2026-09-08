@@ -16,7 +16,7 @@ type Member = RoomPlayer & {
 export class RoomSession {
   readonly members = new Map<string, Member>();
   phase: RoomPhase = 'lobby';
-  trackId: TrackId = 'sunset-circuit';
+  trackId: TrackId = 'breakwater';
   hostId = '';
   matchId = '';
   simulation: OnlineSimulation | null = null;

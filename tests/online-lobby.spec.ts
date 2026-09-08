@@ -4,8 +4,8 @@ import type { RoomSnapshot } from '../src/shared/OnlineProtocol';
 
 test('departed finishers keep their time in live standings and results without a reconnect warning', async ({ page }) => {
   const players = ['Finisher', 'Racer'].map((name, slot) => ({ id: name, name, slot, connected: true, ready: true, dnf: false }));
-  const simulation = new OnlineSimulation('sunset-circuit', players);
-  const snapshot: RoomSnapshot = { type: 'state', code: 'ABCDEFGH', hostId: 'Finisher', trackId: 'sunset-circuit',
+  const simulation = new OnlineSimulation('breakwater', players);
+  const snapshot: RoomSnapshot = { type: 'state', code: 'ABCDEFGH', hostId: 'Finisher', trackId: 'breakwater',
     matchId: 'race', phase: 'racing', players, race: simulation.snapshot() };
   simulation.dispose();
   const finisher = snapshot.race!.racers.find((entry) => entry.id === 'Finisher')!;

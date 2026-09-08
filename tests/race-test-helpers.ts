@@ -71,7 +71,7 @@ export type RaceDiagnostics = {
   };
   session: {
     mode: 'quick-race' | 'time-trial';
-    trackId: 'sunset-circuit' | 'storm-reef';
+    trackId: 'breakwater' | 'nightfall';
     trackName: string;
     racerCount: number;
     currentLapTime: number;

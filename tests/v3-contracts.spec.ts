@@ -9,7 +9,7 @@ import {
 import { RaceManager, type RacerFrame } from '../src/game/RaceManager';
 import { RaceTrack } from '../src/game/Track';
 
-const EXPECTED_TRACK_IDS = ['sunset-circuit', 'storm-reef', 'neon-leviathan', 'caldera-throat', 'storm-needle'] as const;
+const EXPECTED_TRACK_IDS = ['breakwater', 'nightfall', 'sunken-temple'] as const;
 
 test.describe('V3 content and directional checkpoint contracts', () => {
   test.beforeEach(({}, testInfo) => {
@@ -19,7 +19,7 @@ test.describe('V3 content and directional checkpoint contracts', () => {
     );
   });
 
-  test('catalog contains five complete courses and exactly two interaction families', () => {
+  test('catalog contains three rebuilt courses and exactly two interaction families', () => {
     expect([...TRACK_IDS].sort()).toEqual([...EXPECTED_TRACK_IDS].sort());
     expect(Object.keys(TRACK_CATALOG).sort()).toEqual([...EXPECTED_TRACK_IDS].sort());
 
@@ -33,7 +33,7 @@ test.describe('V3 content and directional checkpoint contracts', () => {
       expect(definition.spawnGrid).toHaveLength(4);
       expect(new Set(definition.spawnGrid.map((slot) => `${slot.progress}:${slot.lane}`)).size).toBe(4);
       expect(definition.markerPreset).toMatch(/race|warning/);
-      expect(definition.landmarks.length).toBeGreaterThanOrEqual(2);
+      expect(definition.blocks!.length).toBeGreaterThanOrEqual(20);
       expect(definition.environmentPreset).toBe(definition.environment);
       expect(definition.wavePreset).toBe(definition.waves);
       expect(definition.environment.ambiencePreset).toMatch(/sunset|storm/);

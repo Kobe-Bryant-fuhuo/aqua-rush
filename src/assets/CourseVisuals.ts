@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ARCADE_PALETTE, createOutlineMesh, MaterialLibrary } from './Materials';
 import type { EnvironmentPreset, TrackDefinition } from '../game/ContentCatalog';
-import { createMapLandmark } from './MapLandmarks';
+import { WorldScenery } from './WorldScenery';
 import type { RaceTrack } from '../game/Track';
 
 export type CourseVisualOptions = {
@@ -129,6 +129,7 @@ function createRacingLine(points: readonly THREE.Vector3[]): THREE.Mesh | null {
 /** Layered world kit: atmosphere, far islands/clouds, buoys, gates, and racing line. */
 export class CourseVisuals {
   readonly root = new THREE.Group();
+  private world: WorldScenery | null = null;
   readonly courseRoot = new THREE.Group();
   readonly lightRig = new THREE.Group();
   readonly sky: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
@@ -171,34 +172,8 @@ export class CourseVisuals {
     this.createBuoys(samples, track.halfWidth * 2);
     this.createCheckpointInstances(track);
     this.createVisibleRocks(track);
-    for (const spec of track.definition.landmarks) {
-      if (spec.kind) {
-        const landmark = createMapLandmark(spec.kind);
-        landmark.name = spec.id;
-        landmark.position.copy(track.getOffsetPoint(spec.progress, spec.lateralOffset));
-        landmark.rotation.y = -track.headingAt(spec.progress);
-        this.courseRoot.add(landmark);
-        const resources = new Set<THREE.BufferGeometry | THREE.Material>();
-        landmark.traverse(object => {
-          if (!(object instanceof THREE.Mesh)) return;
-          resources.add(object.geometry);
-          const materials = Array.isArray(object.material) ? object.material : [object.material];
-          materials.forEach(material => resources.add(material));
-        });
-        this.ownedCourseResources.push(...resources);
-      } else this.createLandmark(track, spec);
-    }
-    if (track.definition.id === 'storm-needle') {
-      const geometry = new THREE.BoxGeometry(15, 2.5, 3.4);
-      const material = new THREE.MeshToonMaterial({ color: 0x354956, gradientMap: this.materials.gradientMap });
-      for (const gate of track.definition.interactions) {
-        const span = new THREE.Mesh(geometry, material);
-        span.position.copy(track.getPointAt(gate.progress)).setY(9);
-        span.rotation.y = -track.headingAt(gate.progress);
-        this.courseRoot.add(span);
-      }
-      this.ownedCourseResources.push(geometry, material);
-    }
+    this.world = new WorldScenery(track);
+    this.courseRoot.add(this.world.root);
   }
 
   setCourse(centerline: readonly THREE.Vector3[], courseWidth = 8.5, buoySpacing = 7): void {
@@ -217,8 +192,9 @@ export class CourseVisuals {
     });
   }
 
-  update(elapsed: number, cameraPosition?: THREE.Vector3): void {
+  update(elapsed: number, cameraPosition?: THREE.Vector3, simulationTime = elapsed): void {
     this.cloudRoot.rotation.y = elapsed * 0.004;
+    this.world?.update(simulationTime);
     const pulse = 1.05 + Math.sin(elapsed * 4.6) * 0.3;
     this.beaconMaterials.forEach((material) => { material.emissiveIntensity = pulse; });
     if (cameraPosition) this.sky.position.copy(cameraPosition);
@@ -440,7 +416,7 @@ export class CourseVisuals {
     // Sector posts need to read from a distance without turning into cyan
     // screen wipes when the chase camera passes close beside one.
     const postGeometry = new THREE.CylinderGeometry(0.17, 0.29, 4.25, 8, 1);
-    const signalGeometry = new THREE.PlaneGeometry(1, 0.22);
+    const signalGeometry = new THREE.OctahedronGeometry(.65, 0);
     const postMaterial = new THREE.MeshBasicMaterial({
       color: ARCADE_PALETTE.cyan,
       transparent: true,
@@ -459,7 +435,7 @@ export class CourseVisuals {
     const position = new THREE.Vector3();
     visible.forEach((checkpoint, index) => {
       const heading = Math.atan2(checkpoint.normal.x, checkpoint.normal.z);
-      const visualHalfWidth = Math.min(checkpoint.halfWidth, 7.5);
+      const visualHalfWidth = Math.min(checkpoint.halfWidth, 12);
       quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), heading);
       for (const side of [-1, 1]) {
         position.copy(checkpoint.center).addScaledVector(checkpoint.right, side * visualHalfWidth).setY(2.18);
@@ -469,7 +445,7 @@ export class CourseVisuals {
         posts.setMatrixAt(instance, matrix);
       }
       position.copy(checkpoint.center).setY(6.0);
-      scale.set(visualHalfWidth * 2.05, 1, 1);
+      scale.set(1, 1.8, 1);
       matrix.compose(position, quaternion, scale);
       signals.setMatrixAt(index, matrix);
     });
@@ -505,94 +481,8 @@ export class CourseVisuals {
     this.ownedCourseResources.push(geometry, material);
   }
 
-  private createLandmark(track: RaceTrack, spec: TrackDefinition['landmarks'][number]): void {
-    const definition = track.definition;
-    const root = new THREE.Group();
-    const stormKit = definition.environmentKit === 'storm-reef';
-    root.name = spec.id;
-    root.position.copy(track.getOffsetPoint(spec.progress, spec.lateralOffset));
-    root.rotation.y = -track.headingAt(spec.progress);
-    const rockMaterial = new THREE.MeshToonMaterial({ color: definition.environment.storm ? 0x263a47 : 0xf3e4c2, gradientMap: this.materials.gradientMap });
-    const signalMaterial = new THREE.MeshBasicMaterial({ color: definition.environment.storm ? 0xff694f : 0xffd85a, toneMapped: false });
-    if (stormKit) {
-      const pillarGeometry = new THREE.ConeGeometry(6, 20, 7, 2);
-      for (const side of [-1, 1]) {
-        const pillar = new THREE.Mesh(pillarGeometry, rockMaterial);
-        pillar.position.set(side * 7, 7, 0);
-        pillar.rotation.z = side * 0.17;
-        root.add(pillar);
-      }
-      const spanGeometry = new THREE.TorusGeometry(7, 2.2, 7, 18, Math.PI);
-      const span = new THREE.Mesh(spanGeometry, rockMaterial);
-      span.position.y = 13;
-      root.add(span);
-      const warning = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), signalMaterial);
-      warning.position.set(0, 17, 0);
-      root.add(warning);
-      const wreckGeometry = new THREE.BoxGeometry(5.5, 0.7, 1.5);
-      const wreckMaterial = new THREE.MeshToonMaterial({ color: 0x172733, gradientMap: this.materials.gradientMap });
-      const wrecks = new THREE.InstancedMesh(wreckGeometry, wreckMaterial, 3);
-      const wreckMatrix = new THREE.Matrix4();
-      const wreckQuaternion = new THREE.Quaternion();
-      const wreckScale = new THREE.Vector3();
-      for (let index = 0; index < 3; index += 1) {
-        wreckQuaternion.setFromEuler(new THREE.Euler(0.06 + index * 0.08, index * 0.72, 0.12 - index * 0.09));
-        wreckScale.set(1 - index * 0.12, 1, 1);
-        wreckMatrix.compose(new THREE.Vector3(-20 + index * 18, -0.25, 13 + index * 5), wreckQuaternion, wreckScale);
-        wrecks.setMatrixAt(index, wreckMatrix);
-      }
-      wrecks.instanceMatrix.needsUpdate = true;
-      wrecks.name = 'wreckSilhouettes';
-      const warningGeometry = new THREE.SphereGeometry(0.34, 7, 5);
-      const warnings = new THREE.InstancedMesh(warningGeometry, signalMaterial, 6);
-      for (let index = 0; index < 6; index += 1) {
-        wreckMatrix.makeTranslation(-24 + index * 9, 3.2 + (index % 2) * 1.2, -4 + (index % 3) * 7);
-        warnings.setMatrixAt(index, wreckMatrix);
-      }
-      warnings.instanceMatrix.needsUpdate = true;
-      warnings.name = 'stormWarningLights';
-      if (spec.id.includes('wreck')) root.add(wrecks, warnings);
-      else { root.remove(wrecks); }
-      this.ownedCourseResources.push(pillarGeometry, spanGeometry, warning.geometry, wreckGeometry, warningGeometry, rockMaterial, signalMaterial, wreckMaterial);
-    } else {
-      const towerGeometry = new THREE.CylinderGeometry(1.4, 2.4, 14, 10, 1);
-      const tower = new THREE.Mesh(towerGeometry, rockMaterial);
-      tower.position.y = 6;
-      const lanternGeometry = new THREE.CylinderGeometry(1.8, 1.8, 1.5, 10, 1);
-      const lantern = new THREE.Mesh(lanternGeometry, signalMaterial);
-      lantern.position.y = 13.6;
-      const spectatorGeometry = new THREE.ConeGeometry(0.9, 4.2, 5, 1);
-      spectatorGeometry.rotateX(-Math.PI / 2);
-      const spectatorMaterial = new THREE.MeshToonMaterial({ color: 0xff6b5f, gradientMap: this.materials.gradientMap });
-      const spectators = new THREE.InstancedMesh(spectatorGeometry, spectatorMaterial, 6);
-      const flagGeometry = new THREE.PlaneGeometry(1.6, 0.9);
-      const flagMaterial = new THREE.MeshBasicMaterial({ color: 0xffd85a, side: THREE.DoubleSide, toneMapped: false });
-      const flags = new THREE.InstancedMesh(flagGeometry, flagMaterial, 8);
-      const detailMatrix = new THREE.Matrix4();
-      const detailQuaternion = new THREE.Quaternion();
-      const detailScale = new THREE.Vector3(1, 1, 1);
-      for (let index = 0; index < 6; index += 1) {
-        detailQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), index * 0.83);
-        detailMatrix.compose(new THREE.Vector3(-22 + index * 8.2, 0.15, 9 + (index % 2) * 6), detailQuaternion, detailScale);
-        spectators.setMatrixAt(index, detailMatrix);
-      }
-      for (let index = 0; index < 8; index += 1) {
-        detailQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), index * 0.38);
-        detailMatrix.compose(new THREE.Vector3(-18 + index * 5.2, 3 + (index % 2), -8 + (index % 3) * 5), detailQuaternion, detailScale);
-        flags.setMatrixAt(index, detailMatrix);
-      }
-      spectators.instanceMatrix.needsUpdate = true;
-      flags.instanceMatrix.needsUpdate = true;
-      spectators.name = 'spectatorBoats';
-      flags.name = 'courseFlags';
-      if (spec.id.includes('spectators')) root.add(spectators, flags);
-      else root.add(tower, lantern);
-      this.ownedCourseResources.push(towerGeometry, lanternGeometry, spectatorGeometry, flagGeometry, rockMaterial, signalMaterial, spectatorMaterial, flagMaterial);
-    }
-    this.courseRoot.add(root);
-  }
-
   private clearCourse(): void {
+    this.world?.dispose(); this.world = null;
     this.courseRoot.traverse(object => { if (object instanceof THREE.InstancedMesh) object.dispose(); });
     this.courseRoot.clear();
     this.ownedCourseResources.forEach((resource) => resource.dispose());

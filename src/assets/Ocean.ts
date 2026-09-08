@@ -147,16 +147,19 @@ function createOceanMaterial(waveSurface: WaveSurface): THREE.ShaderMaterial {
         vec3 normal = normalize(vOceanNormal);
         vec3 viewDir = normalize(cameraPosition - vWorldPosition);
         float light = clamp(dot(normal, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0);
-        float band = floor(light * 3.0) / 2.0;
+        float band = smoothstep(0.2, 0.95, light);
         float depthMix = clamp(0.35 + vHeight * mix(0.46, 0.32, uStorm), 0.0, 1.0);
         vec3 color = mix(uDeep, uWater, depthMix) * mix(0.72, 1.12, band);
         float fresnel = pow(1.0 - clamp(dot(normal, viewDir), 0.0, 1.0), mix(3.0, 2.35, uStorm));
-        color = mix(color, uAtmosphere, fresnel * mix(0.34, 0.26, uStorm));
+        color = mix(color, uAtmosphere, fresnel * mix(0.18, 0.12, uStorm));
 
         float crest = smoothstep(mix(0.43, 0.5, uStorm), mix(0.67, 0.78, uStorm), vHeight);
         float ribbons = smoothstep(0.72, 0.92,
           sin(vWorldPosition.x * 0.33 + vWorldPosition.z * 0.19 + uTime * 0.8) * 0.5 + 0.5);
-        color = mix(color, uFoam, crest * ribbons * mix(0.72, 0.86, uStorm));
+        color = mix(color, uFoam, crest * ribbons * mix(0.22, 0.36, uStorm));
+        vec3 halfDir = normalize(viewDir + normalize(uSunDir));
+        float glint = pow(max(dot(normal, halfDir), 0.0), 160.0);
+        color += uFoam * glint * .48;
         gl_FragColor = vec4(color, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

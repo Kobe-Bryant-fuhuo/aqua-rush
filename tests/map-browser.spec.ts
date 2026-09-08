@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test';
 import { TRACK_IDS, getTrackDefinition } from '../src/game/ContentCatalog';
 import { callRaceHook, captureRuntimeErrors, expectNoRuntimeErrors, readRaceDiagnostics, waitForRaceGame } from './race-test-helpers';
 
-const EXPERIMENTAL = TRACK_IDS.filter(id => getTrackDefinition(id).experimental);
+const EXPERIMENTAL = TRACK_IDS;
 
-test('all five course cards are reachable and the experimental shelf is explicit', async ({ page }, info) => {
+test('all three course cards are reachable and the experimental shelf is explicit', async ({ page }, info) => {
   await waitForRaceGame(page);
   await page.locator('#title-start-button').click();
   await page.locator('#mode-time-trial-button').click();
@@ -14,9 +14,9 @@ test('all five course cards are reachable and the experimental shelf is explicit
     await card.scrollIntoViewIfNeeded();
     await expect(card).toBeInViewport();
     await expect(card.locator('svg polygon')).toHaveAttribute('points', /,/);
-    if (EXPERIMENTAL.includes(id)) {
+    if (getTrackDefinition(id).experimental) {
       await expect(card.locator('.course-meta i')).toBeVisible();
-      await expect(card).toContainText('Experimental');
+      await expect(card).toContainText(id === 'sunken-temple' ? 'NEW' : 'Experimental');
     }
   }
   await page.locator('.course-card-grid').evaluate(node => { node.scrollTop = 0; });
@@ -32,6 +32,7 @@ for (const id of EXPERIMENTAL) {
     await page.locator('#title-start-button').click();
     await page.locator('#mode-time-trial-button').click();
     await page.locator(`#course-${id}-button`).click();
+    await page.locator('#course-race-button').click();
     await page.evaluate(() => window.advanceTime!(3100));
     // Keyboard events drive the production input controller; only the fixed clock is accelerated.
     const result = await page.evaluate(() => {
@@ -74,7 +75,7 @@ test('reduced motion preserves wave physics and pause freezes simulation time', 
   await waitForRaceGame(page);
   const run = (reduced: boolean) => page.evaluate((reduced) => {
     const hooks = window.__THREE_GAME_TEST_HOOKS__!;
-    hooks.selectSession('time-trial', 'caldera-throat');
+    hooks.selectSession('time-trial', 'breakwater');
     hooks.setReducedMotion(reduced);
     window.advanceTime!(3100);
     document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', bubbles: true }));

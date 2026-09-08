@@ -12,12 +12,12 @@ export type CameraTuning = {
 };
 
 export const DEFAULT_CAMERA_TUNING: CameraTuning = {
-  distance: 15.6,
-  height: 5.25,
+  distance: 10.8,
+  height: 3.8,
   spring: 46,
   damping: 13.5,
   lookAhead: 3,
-  baseFov: 54,
+  baseFov: 59,
   speedFov: 9,
 };
 

@@ -17,7 +17,7 @@ const visualOptions = {
 async function prepareSession(
   page: Parameters<typeof waitForRaceGame>[0],
   mode: 'quick-race' | 'time-trial',
-  trackId: 'sunset-circuit' | 'storm-reef',
+  trackId: 'breakwater' | 'nightfall',
 ) {
   await waitForRaceGame(page);
   await callRaceHook(page, 'hideDebugUi', true);
@@ -35,7 +35,7 @@ async function prepareSession(
 }
 
 test.describe('V3 course and mode visual baselines', () => {
-  for (const trackId of ['sunset-circuit', 'storm-reef'] as const) {
+  for (const trackId of ['breakwater', 'nightfall'] as const) {
     for (const mode of ['quick-race', 'time-trial'] as const) {
       test(`${trackId} ${mode} truthful desktop`, async ({ page }, testInfo) => {
         test.skip(testInfo.project.name !== 'desktop-chrome', 'Desktop content matrix is captured once.');
@@ -70,8 +70,8 @@ test.describe('V3 course and mode visual baselines', () => {
     test.skip(testInfo.project.name !== 'mobile-chrome', 'Mobile layout is captured in the mobile project.');
     const errors = captureRuntimeErrors(page);
     await page.setViewportSize({ width: 390, height: 664 });
-    await prepareSession(page, 'quick-race', 'storm-reef');
-    await expect(page).toHaveScreenshot('storm-reef-mobile-portrait.png', visualOptions);
+    await prepareSession(page, 'quick-race', 'nightfall');
+    await expect(page).toHaveScreenshot('nightfall-mobile-portrait.png', visualOptions);
     expectNoRuntimeErrors(errors);
   });
 
@@ -79,7 +79,7 @@ test.describe('V3 course and mode visual baselines', () => {
     test.skip(testInfo.project.name !== 'mobile-chrome', 'Mobile layout is captured in the mobile project.');
     const errors = captureRuntimeErrors(page);
     await page.setViewportSize({ width: 844, height: 390 });
-    await prepareSession(page, 'time-trial', 'sunset-circuit');
+    await prepareSession(page, 'time-trial', 'breakwater');
     await expect(page).toHaveScreenshot('sunset-time-trial-mobile-landscape.png', visualOptions);
     expectNoRuntimeErrors(errors);
   });

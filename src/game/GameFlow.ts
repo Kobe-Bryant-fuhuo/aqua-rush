@@ -11,7 +11,7 @@ export type GameFlowSnapshot = Readonly<{
 export class GameFlow {
   private current: GameFlowSnapshot;
 
-  constructor(mode: RaceMode = 'quick-race', trackId: TrackId = 'sunset-circuit') {
+  constructor(mode: RaceMode = 'quick-race', trackId: TrackId = 'breakwater') {
     this.current = { state: 'loading', mode, trackId };
   }
 

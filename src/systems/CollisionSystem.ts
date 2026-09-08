@@ -16,8 +16,9 @@ export class CollisionSystem {
   private previousPairContacts = new Set<string>();
   private previousTrackContacts = new Set<string>();
 
-  resolve(boats: ArcadeBoat[], track: RaceTrack): CollisionResult {
+  resolve(boats: ArcadeBoat[], track: RaceTrack, elapsed = 0): CollisionResult {
     let count = 0;
+    const blocks = [...track.mechanics.blocks, ...track.mechanics.crossings(elapsed)];
     let strongest = 0;
     const currentPairContacts = new Set<string>();
     const currentTrackContacts = new Set<string>();
@@ -44,6 +45,7 @@ export class CollisionSystem {
       }
 
       for (const rock of track.rocks) {
+        if (boat.group.position.y - .5 > rock.height) continue;
         const dx = boat.group.position.x - rock.center.x;
         const dz = boat.group.position.z - rock.center.z;
         const minimum = boat.radius + rock.radius;
@@ -68,10 +70,29 @@ export class CollisionSystem {
       }
     }
 
+    for (const boat of boats) for (const block of blocks) {
+      if (boat.group.position.y - .5 > block.height) continue;
+      this.normal.copy(boat.group.position).sub(block.center);
+      const x = this.normal.dot(block.right), z = this.normal.dot(block.forward);
+      const dx = x - THREE.MathUtils.clamp(x, -block.width / 2, block.width / 2);
+      const dz = z - THREE.MathUtils.clamp(z, -block.length / 2, block.length / 2);
+      const distance = Math.hypot(dx, dz);
+      if (distance >= boat.radius) continue;
+      let overlap = boat.radius - distance;
+      if (distance > .00001) this.normal.copy(block.right).multiplyScalar(dx / distance).addScaledVector(block.forward, dz / distance);
+      else if (block.width / 2 - Math.abs(x) < block.length / 2 - Math.abs(z)) {
+        this.normal.copy(block.right).multiplyScalar(Math.sign(x) || 1); overlap += block.width / 2 - Math.abs(x);
+      } else { this.normal.copy(block.forward).multiplyScalar(Math.sign(z) || -1); overlap += block.length / 2 - Math.abs(z); }
+      boat.group.position.addScaledVector(this.normal, overlap + .025);
+      const impact = Math.max(0, -boat.velocity.dot(this.normal));
+      if (impact > 1) { boat.applyCollision(this.normal, Math.min(1, impact / 18)); count++; strongest = Math.max(strongest, impact / 18); }
+    }
+
     for (let aIndex = 0; aIndex < boats.length; aIndex += 1) {
       for (let bIndex = aIndex + 1; bIndex < boats.length; bIndex += 1) {
         const a = boats[aIndex];
         const b = boats[bIndex];
+        if (Math.abs(a.group.position.y - b.group.position.y) > 1.5) continue;
         const pairKey = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`;
         const dx = a.group.position.x - b.group.position.x;
         const dz = a.group.position.z - b.group.position.z;

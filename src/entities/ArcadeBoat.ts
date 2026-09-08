@@ -1,3 +1,5 @@
+import type { WorldMechanics } from '../game/WorldMechanics';
+import type { CurrentField } from '../game/CurrentField';
 import * as THREE from 'three';
 import type { RaceIntent } from '../shared/RaceIntent';
 import type { WaveSurface } from '../systems/WaveSurface';
@@ -28,11 +30,11 @@ export const DEFAULT_PLAYER_TUNING: BoatTuning = {
   coastDrag: 2.1,
   turnRate: 1.72,
   lateralGrip: 5.4,
-  driftGrip: 1.65,
+  driftGrip: 3,
   boostAcceleration: 14,
   boostedMaxSpeed: 33,
   boostDrain: 0.28,
-  boostRecharge: 0.12,
+  boostRecharge: 0.04,
 };
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -55,6 +57,24 @@ export type WaveHandlingState = {
 };
 
 export class ArcadeBoat {
+  currentField: CurrentField | null = null;
+  worldMechanics: WorldMechanics | null = null;
+  flightActive = false;
+  flightTime = 0;
+  flightCooldown = 0;
+  jumps = 0;
+  skillChain = 0;
+  skillTime = 0;
+  skillKind = 0;
+  skillSerial = 0;
+  skillReward = 0;
+  draftCharge = 0;
+  draftCooldown = 0;
+  drafting = false;
+  draftReady = false;
+  private readonly flightEuler = new THREE.Euler();
+  private readonly rampDelta = new THREE.Vector3();
+  readonly waterCurrent = new THREE.Vector3();
   readonly previousPosition = new THREE.Vector3();
   private static readonly activeBoats = new Set<ArcadeBoat>();
 
@@ -121,11 +141,19 @@ export class ArcadeBoat {
 
   drive(delta: number, intent: RaceIntent, tuning: BoatTuning, enabled: boolean): void {
     this.previousPosition.copy(this.group.position);
+    if (enabled) {
+      this.skillTime = Math.max(0, this.skillTime - delta);
+      this.draftCooldown = Math.max(0, this.draftCooldown - delta);
+      if (this.skillTime === 0) this.skillChain = 0;
+    }
+    if (enabled && this.currentField) this.currentField.sample(this.group.position, this.waterCurrent);
+    else this.waterCurrent.set(0, 0, 0);
     const throttle = enabled ? THREE.MathUtils.clamp(intent.throttle, -1, 1) : 0;
     const steer = enabled ? THREE.MathUtils.clamp(intent.steer, -1, 1) : 0;
     const boostHeld = enabled && intent.boost && throttle > 0.05;
     const speedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
-    const canStartDrift = boostHeld && Math.abs(steer) > 0.3 && speedRatio > 0.28;
+    const canStartDrift = boostHeld && !this.flightActive && Math.abs(steer) > 0.3 && speedRatio > 0.28;
+    if (this.flightActive && this.drifting) { this.drifting = false; this.driftCharge = this.driftQuality = 0; }
     if (!this.drifting && canStartDrift) {
       this.drifting = true;
       this.driftDirection = Math.sign(steer) || 1;
@@ -139,14 +167,15 @@ export class ArcadeBoat {
         ? THREE.MathUtils.clamp(steerSweetSpot * (0.35 + speedRatio * 0.65), 0, 1)
         : 0;
       if (steerAgreement && Math.abs(steer) > 0.2) {
-        this.driftCharge = Math.min(1, this.driftCharge + (0.1 + this.driftQuality * 0.32) * delta);
+        this.driftCharge = Math.min(1, this.driftCharge + (0.2 + this.driftQuality * 0.45) * delta);
       } else {
         this.driftCharge = Math.max(0, this.driftCharge - 0.42 * delta);
       }
     } else if (this.drifting && !boostHeld) {
       if (this.driftCharge >= 0.16) {
-        this.miniBoostStrength = THREE.MathUtils.smoothstep(this.driftCharge, 0.1, 1);
-        this.miniBoostTimer = THREE.MathUtils.lerp(0.22, 0.78, this.miniBoostStrength);
+        const tier = this.driftCharge >= .7 ? 3 : this.driftCharge >= .4 ? 2 : 1;
+        this.grantMiniBoost(.3 + tier * .22);
+        if (enabled && this.speed > 10) this.rewardSkill(1, .055 + tier * .045);
       } else {
         // A cancelled drift costs momentum instead of becoming a free sharper turn.
         this.speed *= 0.9;
@@ -187,7 +216,7 @@ export class ArcadeBoat {
       this.speed += tuning.boostAcceleration * (0.6 + this.miniBoostStrength * 0.62) * delta;
     }
     if (this.drifting) {
-      const poorDriftTax = THREE.MathUtils.lerp(1.9, 0.35, this.driftQuality);
+      const poorDriftTax = THREE.MathUtils.lerp(1.2, 0.15, this.driftQuality);
       this.speed -= Math.sign(this.speed || 1) * poorDriftTax * delta;
     }
 
@@ -196,7 +225,8 @@ export class ArcadeBoat {
     // grid slot while preserving a clear effect at racing speed.
     if (enabled) this.speed += this.waveHandling.alongAcceleration * delta;
 
-    const maxForward = this.boosting ? tuning.boostedMaxSpeed : tuning.maxForwardSpeed;
+    const chainHeadroom = Math.max(0, this.skillChain - 1) * 2;
+    const maxForward = this.boosting ? tuning.boostedMaxSpeed + chainHeadroom : tuning.maxForwardSpeed;
     this.speed = THREE.MathUtils.clamp(this.speed, -tuning.maxReverseSpeed, maxForward);
     const postAccelerationSpeedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
     const baseSteeringAuthority = (0.58 + postAccelerationSpeedRatio * 0.42) * (1 - postAccelerationSpeedRatio * 0.13);
@@ -206,7 +236,7 @@ export class ArcadeBoat {
 
     this.getForward(this.forward);
     this.planarRight.copy(this.forward).cross(WORLD_UP).normalize();
-    this.desiredVelocity.copy(this.forward).multiplyScalar(this.speed);
+    this.desiredVelocity.copy(this.forward).multiplyScalar(this.speed).add(this.waterCurrent);
     const highSpeedGrip = tuning.lateralGrip * (1 + postAccelerationSpeedRatio * 0.18);
     const grip = (this.drifting ? tuning.driftGrip : highSpeedGrip) * this.waveHandling.gripScale;
     const gripFactor = 1 - Math.exp(-grip * delta);
@@ -232,9 +262,52 @@ export class ArcadeBoat {
     const forwardSlope = (bowHeight - sternHeight) / (bowDistance * 2);
     const crossSlope = (starboardHeight - portHeight) / (halfBeam * 2);
 
-    const wasAirborne = this.airborne;
+    const wasAirborne = this.airborne && !this.flightActive;
     const descentSpeed = Math.max(0, -this.verticalVelocity);
     const dt = Math.min(delta, 0.05);
+    this.flightCooldown = Math.max(0, this.flightCooldown - dt);
+    if (this.flightActive) {
+      this.flightTime += dt;
+      this.verticalVelocity -= 16 * dt;
+      this.group.position.y += this.verticalVelocity * dt;
+      if (this.group.position.y <= targetWaterY && this.verticalVelocity < 0) {
+        this.flightActive = false; this.airborne = false;
+        this.group.position.y = targetWaterY; this.verticalVelocity = 0;
+        this.landingIntensity = .9; this.flightCooldown = 1.2; this.jumps++;
+        const alignment = this.velocity.lengthSq() > 1 ? this.getForward(this.surfaceForward).dot(this.velocity.clone().normalize()) : 0;
+        const clean = alignment > .94 && Math.abs(this.currentSteer) < .4;
+        this.grantMiniBoost(clean ? .85 : .3);
+        if (clean) this.rewardSkill(2, .18);
+        else { this.speed *= .86; this.velocity.multiplyScalar(.86); }
+      } else {
+        this.contact = 0; this.airborne = true;
+        this.waveHandling.alongAcceleration = this.waveHandling.lateralAcceleration = 0;
+        this.waveHandling.steeringAuthority = .7; this.waveHandling.gripScale = .3;
+        this.group.quaternion.setFromEuler(this.flightEuler.set(Math.atan2(this.verticalVelocity, Math.max(8, Math.abs(this.speed))), -this.heading, -this.currentSteer * .08));
+        return;
+      }
+    }
+    if (!this.flightActive && this.flightCooldown === 0) for (const ramp of this.worldMechanics?.ramps ?? []) {
+      this.rampDelta.copy(this.group.position).sub(ramp.center);
+      const along = this.rampDelta.dot(ramp.forward), across = this.rampDelta.dot(ramp.right);
+      const previousAlong = this.rampDelta.copy(this.previousPosition).sub(ramp.center).dot(ramp.forward);
+      if (Math.abs(across) > ramp.width / 2) continue;
+      if (along >= -ramp.length / 2 && along <= ramp.length / 2) {
+        const height = (along / ramp.length + .5) * ramp.height + .42;
+        this.group.position.y = Math.max(targetWaterY, height);
+        this.verticalVelocity = 0; this.contact = 1; this.airborne = false;
+        this.waveHandling.alongAcceleration = this.waveHandling.lateralAcceleration = 0;
+        this.waveHandling.steeringAuthority = this.waveHandling.gripScale = 1;
+        this.group.quaternion.setFromEuler(this.flightEuler.set(Math.atan2(ramp.height, ramp.length), -this.heading, 0));
+        return;
+      }
+      if (previousAlong <= ramp.length / 2 && previousAlong >= -ramp.length / 2 && along > ramp.length / 2 && this.velocity.dot(ramp.forward) > 1) {
+        this.flightActive = true; this.flightTime = 0; this.airborne = true; this.contact = 0;
+        this.group.position.y = Math.max(targetWaterY, ramp.height + .42);
+        this.verticalVelocity = ramp.launch * Math.min(1, Math.max(.15, this.speed / 18));
+        return;
+      }
+    }
     if (delta > 0.15 || !Number.isFinite(this.group.position.y)) {
       this.group.position.y = targetWaterY;
       this.verticalVelocity = 0;
@@ -344,6 +417,10 @@ export class ArcadeBoat {
   }
 
   applyCollision(normal: THREE.Vector3, severity: number): void {
+    if (severity >= .16) {
+      this.skillChain = 0; this.skillTime = 0;
+      this.draftReady = false; this.draftCharge = 0; this.draftCooldown = Math.max(1, this.draftCooldown);
+    }
     const inwardSpeed = this.velocity.dot(normal);
     if (inwardSpeed < 0) this.velocity.addScaledVector(normal, -inwardSpeed * 1.45);
     this.speed *= THREE.MathUtils.lerp(0.92, 0.68, THREE.MathUtils.clamp(severity, 0, 1));
@@ -354,23 +431,38 @@ export class ArcadeBoat {
     this.boost = THREE.MathUtils.clamp(this.boost + Math.max(0, amount), 0, 1);
   }
 
+  /** Successful driving feeds usable boost; a clean sequence increases the refill, capped at three. */
+  rewardSkill(kind: 1 | 2 | 3 | 4, refill: number): void {
+    this.skillChain = Math.min(3, this.skillChain + 1);
+    this.skillTime = 10;
+    this.skillKind = kind;
+    this.skillSerial++;
+    this.skillReward = refill + (this.skillChain - 1) * .04;
+    this.restoreBoost(this.skillReward);
+  }
+
   grantMiniBoost(strength: number): void {
     const normalized = THREE.MathUtils.clamp(strength, 0, 1);
-    this.miniBoostStrength = Math.max(this.miniBoostStrength, normalized);
-    this.miniBoostTimer = Math.max(this.miniBoostTimer, THREE.MathUtils.lerp(0.28, 0.88, normalized));
+    if (this.miniBoostTimer <= 0 && this.speed > 5) this.speed = Math.min(33, this.speed + 3 + normalized * 3);
+    this.miniBoostStrength = this.miniBoostTimer > 0 ? Math.max(this.miniBoostStrength, normalized) : normalized;
+    this.miniBoostTimer = Math.max(this.miniBoostTimer, THREE.MathUtils.lerp(0.45, 1.2, normalized));
   }
 
   syncSpeedFromVelocity(): void {
     this.getForward(this.forward);
-    this.speed = this.velocity.dot(this.forward);
+    this.speed = this.velocity.dot(this.forward) - this.waterCurrent.dot(this.forward);
   }
 
   reset(position: THREE.Vector3, heading: number): void {
     this.group.position.copy(position);
     this.previousPosition.copy(position);
     this.heading = heading;
+    this.flightActive = false; this.flightTime = 0; this.flightCooldown = 0; this.jumps = 0;
+    this.skillChain = this.skillTime = this.skillKind = this.skillSerial = this.skillReward = 0;
+    this.draftCharge = this.draftCooldown = 0; this.drafting = this.draftReady = false;
     this.speed = 0;
     this.velocity.set(0, 0, 0);
+    this.waterCurrent.set(0, 0, 0);
     this.boost = 1;
     this.boosting = false;
     this.ordinaryBoosting = false;
@@ -413,6 +505,8 @@ export class ArcadeBoat {
 
   restoreState(state: BoatState): void {
     this.group.position.fromArray(state.position);
+    if (this.currentField) this.currentField.sample(this.group.position, this.waterCurrent);
+    else this.waterCurrent.set(0, 0, 0);
     this.velocity.fromArray(state.velocity);
     this.group.quaternion.fromArray(state.quaternion);
     this.visualRoot.rotation.set(...state.visualRotation);

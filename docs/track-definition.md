@@ -1,6 +1,6 @@
 # Aqua Rush V3 TrackDefinition
 
-`src/game/ContentCatalog.ts` is the authored content source. `TRACK_CATALOG` contains `sunset-circuit`, `storm-reef`, `neon-leviathan`, `caldera-throat`, and `storm-needle`. The last three are explicitly experimental local courses; `ONLINE_TRACK_IDS` permits only the first two. Unknown IDs are rejected.
+`src/game/WorldCatalog.ts` authors three worlds: `breakwater`, `nightfall`, and `sunken-temple`. `ContentCatalog.ts` registers and validates them. All three are available online. Retired and unknown IDs are rejected.
 
 ## Stable fields
 
@@ -11,7 +11,8 @@
 | `halfWidth`, `width`, `buoySpacing` | Advisory guide/marker placement; never a solid race corridor |
 | `lapCount`, `spawnGrid` | Session length and the four authored start slots |
 | `markerPreset` | Course-specific standard/tall/hazard marker language |
-| `environmentKit`, `landmarks` | Course-specific landmark family and authored progress/lateral placements |
+| `blocks`, `ramps`, `crossings` | Shared oriented architecture, physical launch surfaces and warned work-barge crossings |
+| `currents`, `routes` | Optional bounded current fields and readable alternate lines |
 | `timeTrialTargets` | Gold/silver/bronze authored total-time references |
 | `controlPoints` | Closed Catmull-Rom route used by AI, guide, recovery, and authored placements |
 | `checkpoints` | Ordered directional plane definitions |
@@ -37,10 +38,10 @@ Reverse, side, vertical, low-speed, repeated overlap, skipped, and out-of-order 
 
 ## Open water and recovery
 
-`halfWidth` is advisory. It is used for AI line choice, marker placement, guide presentation, and off-route feedback only. `CollisionSystem` resolves boats, catalogued visible rocks and shared landmark footprints, and the extreme ±400-unit world safety bound. It never pushes a boat back into a track corridor.
+`halfWidth` is advisory. It is used for AI line choice, marker placement, guide presentation, and off-route feedback only. `CollisionSystem` resolves boats, catalogued visible rocks and height-aware oriented waterfront blocks and moving locks, and the extreme ±400-unit world safety bound. It never pushes a boat back into a track corridor.
 
 Recovery moves the player to the last valid sector without changing lap, expected checkpoint, gate claims, or remaining boost. It is an explicit `X`/Pause action; off-route and stationary states only change its presentation and eligibility diagnostics.
 
 ## Content extension rule
 
-The approved Map Pack expansion adds three P0 courses via `ExperimentalMapPack.ts`. Each definition is validated at registration. `landmarks.kind` selects cargo, volcano or turbine modules; positions use arc-length progress plus lateral offset. `LandmarkFootprints.ts` shares visible foundations with collision proxies. Advanced flow, moving-ship and flight designs remain unregistered until implemented and tested. See [implementation evidence](map-expansion-review.zh-CN.md).
+`WorldMechanics.ts` resolves authored progress/lateral positions for physics and visuals. Ordinary banks clear the center line, marked bypass curves and ramp landing fans. Deliberate low walls have a marked bypass. Clean, aligned landings give a stronger burst and continue a skill chain; misaligned landings lose momentum. Barge crossings divide their period into open, warning, crossing and clear phases, using simulation time on the server and prediction client. The barge traverses the center after warning while the right bypass remains open. Reduced motion changes presentation only.

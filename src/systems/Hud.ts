@@ -1,3 +1,4 @@
+import type { RaceTrack } from '../game/Track';
 import { TRACK_IDS, getTrackDefinition, type TrackId } from '../game/ContentCatalog';
 export type RaceHudState = {
   /** World speed; defaults to converting units/s to km/h with speedScale=3.6. */
@@ -16,6 +17,9 @@ export type RaceHudState = {
   drifting?: boolean;
   /** Normalized 0..1 drift reward charge. */
   driftCharge?: number;
+  skillChain?: number;
+  draftCharge?: number;
+  draftReady?: boolean;
   status?: string;
 };
 
@@ -173,6 +177,9 @@ export class Hud {
   private readonly courseBackButton = this.getElement<HTMLButtonElement>('#course-back-button');
   private readonly courseModeLabel = this.getElement('#course-mode-label');
   private readonly courseButtons = this.createCourseCards();
+  private readonly courseFeature = this.createCourseFeature();
+  private readonly minimap = this.createMinimap();
+  private coursePreviewHandler: ((id: TrackId) => void) | null = null;
 
   private restartHandler: (() => void) | null = null;
   private pauseHandler: (() => void) | null = null;
@@ -207,8 +214,9 @@ export class Hud {
     this.courseBackButton.addEventListener('click', this.handleCourseBack);
     for (const [id, button] of this.courseButtons) button.onclick = () => {
       this.selectCourseCard(id);
-      this.courseSelectHandler?.(id);
+      this.coursePreviewHandler?.(id);
     };
+    this.getElement<HTMLButtonElement>('#course-race-button').onclick = () => this.courseSelectHandler?.(this.getSelectedCourseButton().dataset.track as TrackId);
     this.recoveryButton.addEventListener('click', this.handleRecovery);
     this.pauseMenuButton.addEventListener('click', this.handleMenu);
     this.resultsMenuButton.addEventListener('click', this.handleMenu);
@@ -238,13 +246,15 @@ export class Hud {
     const steering = Math.max(-1, Math.min(1, state.steering ?? 0));
     const driftCharge = Math.max(0, Math.min(1, state.driftCharge ?? 0));
     this.turnFeedback.style.setProperty('--steer', String(steering));
-    this.driftChargeFill.style.setProperty('--drift-charge', String(driftCharge));
+    this.driftChargeFill.style.setProperty('--drift-charge', String(state.drifting ? driftCharge : Math.min(1, (state.draftCharge ?? 0) / 1.25)));
+    this.getElement('#skill-chain-label').textContent = state.skillChain ? '×' + state.skillChain : '';
+    this.turnFeedback.classList.toggle('is-draft-ready', Boolean(state.draftReady));
     this.turnFeedback.classList.toggle('is-turning-left', steering < -0.12);
     this.turnFeedback.classList.toggle('is-turning-right', steering > 0.12);
     this.turnFeedback.classList.toggle('is-drifting', Boolean(state.drifting));
     this.turnFeedbackLabel.textContent = state.drifting
-      ? driftCharge > 0.82 ? 'RELEASE!' : 'DRIFT'
-      : boost < 0.2 ? 'RECHARGE' : 'GRIP';
+      ? driftCharge >= .7 ? 'III · RELEASE!' : driftCharge >= .4 ? 'II · RELEASE' : driftCharge >= .16 ? 'I · RELEASE' : 'DRIFT'
+      : state.draftReady ? 'PULL OUT!' : (state.draftCharge ?? 0) > 0 ? 'SLIPSTREAM' : boost < 0.2 ? 'DRIFT TO CHARGE' : 'GRIP';
 
     if (position !== this.lastPosition) {
       this.positionValue.animate(
@@ -318,7 +328,7 @@ export class Hud {
     document.body.dataset.uiState = state;
 
     this.titleStartButton.disabled = state === 'loading';
-    this.titleStartButton.textContent = state === 'loading' ? 'Loading…' : 'Start racing';
+    this.titleStartButton.textContent = state === 'loading' ? '正在准备海面…' : '开始竞速 ↗';
     if (!visible) return;
     const focusTarget = state === 'title'
       ? this.titleStartButton
@@ -333,7 +343,7 @@ export class Hud {
   showCourseSelect(view: HudCourseSelectView = { mode: 'quick-race' }): void {
     this.courseModeLabel.textContent = modeLabel(view.mode);
     for (const course of view.courses ?? []) this.updateCourseCard(course);
-    this.selectCourseCard(view.selectedTrack ?? 'sunset-circuit');
+    this.selectCourseCard(view.selectedTrack ?? 'breakwater');
     this.showFlow('track-select');
   }
 
@@ -394,6 +404,8 @@ export class Hud {
   onMute(handler: (() => void) | null): void { this.muteHandler = handler; }
   onStart(handler: (() => void) | null): void { this.startHandler = handler; }
   onModeSelect(handler: ((mode: HudRaceMode) => void) | null): void { this.modeSelectHandler = handler; }
+  onCoursePreview(handler: (id: TrackId) => void): void { this.coursePreviewHandler = handler; }
+
   onCourseSelect(handler: ((trackId: HudTrackId) => void) | null): void { this.courseSelectHandler = handler; }
   onBack(handler: ((from: 'mode-select' | 'track-select') => void) | null): void { this.backHandler = handler; }
   onRecovery(handler: (() => void) | null): void { this.recoveryHandler = handler; }
@@ -470,6 +482,40 @@ export class Hud {
     this.otherCourseHandler = null;
   }
 
+  private createMinimap(): SVGSVGElement {
+    const map = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    map.id = 'race-minimap'; map.setAttribute('viewBox', '-200 -200 400 400');
+    map.setAttribute('aria-label', '赛道小地图');
+    this.root.append(map); return map;
+  }
+
+  setMinimap(track: RaceTrack): void {
+    const points = track.points.filter((_, i) => i % 8 === 0).map(p => p.x + ',' + p.z).join(' ');
+    this.minimap.innerHTML = '<polygon points="' + points + '"/><circle class="map-target" r="7"/><circle class="map-player" r="8"/>';
+  }
+
+  updateMinimap(x: number, z: number, targetX: number, targetZ: number): void {
+    const player = this.minimap.querySelector('.map-player'), target = this.minimap.querySelector('.map-target');
+    player?.setAttribute('cx', String(x)); player?.setAttribute('cy', String(z));
+    target?.setAttribute('cx', String(targetX)); target?.setAttribute('cy', String(targetZ));
+  }
+
+  private createCourseFeature(): HTMLElement {
+    const root = document.createElement('div');
+    root.id = 'course-feature';
+    root.hidden = true;
+    root.innerHTML = '<strong></strong><span></span>';
+    this.root.append(root);
+    return root;
+  }
+
+  updateCourseFeature(title: string, hint: string): void {
+    this.courseFeature.hidden = !title;
+    const heading = this.courseFeature.querySelector('strong')!, detail = this.courseFeature.querySelector('span')!;
+    if (heading.textContent !== title) heading.textContent = title;
+    if (detail.textContent !== hint) detail.textContent = hint;
+  }
+
   private createCourseCards(): Map<TrackId, HTMLButtonElement> {
     const grid = this.getElement('.course-card-grid');
     const template = document.createElement('button');
@@ -505,11 +551,19 @@ export class Hud {
     button.querySelector('strong')!.textContent = course.displayName ?? course.name ?? definition.name;
     button.querySelector('.selection-copy > small')!.textContent = course.description ?? definition.description;
     button.querySelector('.course-meta em')!.textContent = course.difficulty ?? definition.difficulty;
-    button.querySelector('.course-meta i')!.textContent = definition.experimental ? 'Experimental · Local' : (course.environmentLabel ?? '');
+    button.querySelector('.course-meta i')!.textContent = definition.subtitle;
+    button.querySelector('.course-record i')!.textContent = definition.rulesRevision ? 'Best total · V' + definition.rulesRevision : 'Best total';
     button.querySelector('.course-record b')!.textContent = formatOptionalTime(course.bestTotal);
   }
 
   private selectCourseCard(trackId: HudTrackId): void {
+    const definition = getTrackDefinition(trackId);
+    document.body.dataset.world = trackId;
+    this.getElement('#course-subtitle').textContent = definition.subtitle;
+    this.getElement('#course-display-name').textContent = definition.name;
+    this.getElement('#course-description').textContent = definition.description;
+    this.getElement('#course-mechanics').textContent = definition.id === 'nightfall' ? '预判横渡   /   尾流超车   /   右侧绕行'
+      : definition.id === 'sunken-temple' ? '借流出弯   /   漂移连段   /   遗迹飞跃' : '漂移蓄力   /   飞越堤墙   /   精准落水';
     for (const [id, button] of this.courseButtons) {
       const selected = id === trackId;
       button.classList.toggle('is-selected', selected);
@@ -519,7 +573,7 @@ export class Hud {
 
   private getSelectedCourseButton(): HTMLButtonElement {
     return [...this.courseButtons.values()].find(button => button.getAttribute('aria-pressed') === 'true')
-      ?? this.courseButtons.get('sunset-circuit')!;
+      ?? this.courseButtons.get('breakwater')!;
   }
 
   private visibleModal(): HTMLElement | null {

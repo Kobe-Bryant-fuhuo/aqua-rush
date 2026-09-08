@@ -119,6 +119,7 @@ export class InteractionSystem {
           gate.activationCount += 1;
           if (gate.kind === 'boost-gate') boat.restoreBoost(gate.definition.reward);
           else boat.grantMiniBoost(gate.definition.reward);
+          boat.rewardSkill(3, gate.kind === 'drift-gate' ? .08 : 0);
         } else {
           gate.failureCount += 1;
         }

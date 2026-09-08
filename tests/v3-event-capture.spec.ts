@@ -55,8 +55,8 @@ test('capture production collision, drift, landing and gate feedback', async ({ 
 
   // The hook only stages a deterministic position; the production rock
   // collision, separation, event, audio and VFX paths perform the impact.
-  let diagnostics = await startTimeTrial(page, 'storm-reef');
-  const stormDefinition = getTrackDefinition('storm-reef');
+  let diagnostics = await startTimeTrial(page, 'nightfall');
+  const stormDefinition = getTrackDefinition('nightfall');
   const stormTrack = new RaceTrack(stormDefinition);
   const rock = stormDefinition.rocks[0];
   const rockCenter = stormTrack.getOffsetPoint(rock.progress, rock.lateralOffset);
@@ -71,14 +71,14 @@ test('capture production collision, drift, landing and gate feedback', async ({ 
 
   // Consume boost through real keyboard input, then cross a production Boost
   // Gate so its feedback state and restored meter are visible together.
-  diagnostics = await startTimeTrial(page, 'sunset-circuit');
+  diagnostics = await startTimeTrial(page, 'breakwater');
   await page.keyboard.down('KeyW');
   await page.keyboard.down('Space');
   await advanceGame(page, 1_100);
   await page.keyboard.up('Space');
   await page.keyboard.up('KeyW');
   const boostBefore = (await readRaceDiagnostics(page)).player.boost;
-  const boostGate = interactionGate('sunset-circuit', 'boost-gate');
+  const boostGate = interactionGate('breakwater', 'boost-gate');
   const boostForward = { x: Math.sin(diagnostics.player.heading), z: -Math.cos(diagnostics.player.heading) };
   await callRaceHook(
     page,
@@ -102,7 +102,7 @@ test('capture production collision, drift, landing and gate feedback', async ({ 
 
   // Build an actual drift with keyboard controls, capture it, then enter the
   // Drift Gate while the production drift state remains valid.
-  diagnostics = await startTimeTrial(page, 'storm-reef');
+  diagnostics = await startTimeTrial(page, 'nightfall');
   await page.keyboard.down('KeyW');
   await advanceGame(page, 1_700);
   await page.keyboard.down('KeyD');
@@ -112,7 +112,7 @@ test('capture production collision, drift, landing and gate feedback', async ({ 
   expect(diagnostics.player.drifting).toBe(true);
   expect(diagnostics.player.driftQuality).toBeGreaterThanOrEqual(0.28);
 
-  const driftGate = interactionGate('storm-reef', 'drift-gate');
+  const driftGate = interactionGate('nightfall', 'drift-gate');
   const driftForward = { x: Math.sin(diagnostics.player.heading), z: -Math.cos(diagnostics.player.heading) };
   await callRaceHook(
     page,
@@ -136,7 +136,7 @@ test('capture production collision, drift, landing and gate feedback', async ({ 
 
   // Landing is captured from the real Storm Reef wave/contact solver. A fast
   // boat is advanced in fixed 100 ms bursts until airborne -> contact occurs.
-  diagnostics = await startTimeTrial(page, 'storm-reef');
+  diagnostics = await startTimeTrial(page, 'nightfall');
   const heading = diagnostics.player.heading;
   await callRaceHook(page, 'setPlayerKinematics', diagnostics.player.position.x, diagnostics.player.position.y ?? 0, diagnostics.player.position.z, Math.sin(heading) * 31, 0, -Math.cos(heading) * 31);
   await page.keyboard.down('KeyW');

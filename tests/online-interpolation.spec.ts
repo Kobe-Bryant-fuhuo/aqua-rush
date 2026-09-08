@@ -6,7 +6,7 @@ import { NEUTRAL_INPUT, type RaceSnapshot } from '../src/shared/OnlineProtocol';
 
 function movingSnapshots() {
   const players = ['self', 'remote'].map((id, slot) => ({ id, name: id, slot, ready: true, connected: true, dnf: false }));
-  const simulation = new OnlineSimulation('sunset-circuit', players);
+  const simulation = new OnlineSimulation('breakwater', players);
   const template = simulation.snapshot();
   simulation.dispose();
   return (milliseconds: number): RaceSnapshot => {
@@ -26,7 +26,7 @@ for (const hz of [60, 144]) for (const pattern of ['jitter', 'bursts'] as const)
   test(`remote motion stays continuous through ${pattern} at ${hz} Hz`, async ({}, testInfo) => {
     const make = movingSnapshots();
     let now = 0;
-    const prediction = new OnlinePrediction('self', 'sunset-circuit', 'match', () => {}, () => now);
+    const prediction = new OnlinePrediction('self', 'breakwater', 'match', () => {}, () => now);
     const queue: Array<{ at: number; snapshot: RaceSnapshot }> = [];
     let delivery = 0;
     for (let stamp = 0; stamp <= 6000; stamp += 50) {

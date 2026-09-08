@@ -15,7 +15,7 @@ const STEP_MS = Number(process.env.BOT_PLAYTEST_STEP_MS ?? 100);
 const BOT_STEPS = Number(process.env.BOT_PLAYTEST_STEPS ?? 140);
 const REQUIRE_FINISH = process.env.BOT_REQUIRE_FINISH === '1';
 const BOOST_ENABLED = process.env.BOT_DISABLE_BOOST !== '1';
-const BOT_TRACK = process.env.BOT_TRACK ?? 'sunset-circuit';
+const BOT_TRACK = process.env.BOT_TRACK ?? 'breakwater';
 const BOT_MODE = process.env.BOT_MODE ?? 'quick-race';
 
 if (!isTrackId(BOT_TRACK)) {
@@ -47,7 +47,7 @@ test('bot playtest: feedback steering drives real race progress without softlock
   test.setTimeout(Math.max(45_000, BOT_STEPS * STEP_MS * 2.2 + 15_000));
 
   const errors = captureRuntimeErrors(page);
-  if (BOT_TRACK === 'sunset-circuit' && BOT_MODE === 'quick-race') {
+  if (BOT_TRACK === 'breakwater' && BOT_MODE === 'quick-race') {
     // Preserve the exact V2 default setup and all existing bot semantics.
     await loadRaceState(page, 'active-play');
   } else {

@@ -87,8 +87,8 @@ test('two browsers race, pause locally and explicitly rejoin the same seat after
     await guest.locator('#online-join').click();
     await expect(page.locator('#online-players li')).toHaveCount(2);
     await expect(guest.locator('#online-track')).toBeDisabled();
-    await page.locator('#online-track').selectOption('storm-reef');
-    await expect(guest.locator('#online-track')).toHaveValue('storm-reef');
+    await page.locator('#online-track').selectOption('nightfall');
+    await expect(guest.locator('#online-track')).toHaveValue('nightfall');
     await page.screenshot({ path: `artifacts/online-lobby-${page.viewportSize()?.width}.png` });
     await page.locator('#online-ready').click();
     await guest.locator('#online-ready').click();

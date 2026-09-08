@@ -1,6 +1,6 @@
 # Online Race on Cloudflare
 
-Online Race adds friend rooms for 2–4 players on both existing three-lap courses.
+Online Race adds friend rooms for 2–4 players on Breakwater, Nightfall, and Sunken Temple. Protocol v5 includes skill-chain and drafting state, departed-racer flags, graded landings and timed barge crossings; deploy frontend and Worker together.
 Quick Race and Time Trial continue to work without a network service. Online
 results never update local Time Trial records.
 

@@ -20,13 +20,21 @@ export function validateTrackDefinition(track: TrackDefinition): void {
       last = gate.progress;
     }
   }
-  for (const entries of [track.interactions, track.rocks, track.landmarks]) {
+  for (const entries of [track.interactions, track.rocks, track.blocks ?? [], track.ramps ?? []]) {
     if (!unique(entries)) fail('duplicate content IDs');
     if (entries.some(e => !progress(e.progress) || !Number.isFinite(e.lateralOffset))) fail('invalid content anchor');
   }
   if (track.interactions.some(g => !positive(g.halfWidth) || !positive(g.cooldown) || !positive(g.reward) || g.reward > 1)) fail('invalid reward');
   if (track.rocks.some(r => !positive(r.radius) || !positive(r.height))) fail('invalid rock');
+  if ([...(track.blocks ?? []), ...(track.ramps ?? [])].some(b => !positive(b.width) || !positive(b.length) || !positive(b.height))) fail('invalid world dimensions');
+  if (track.ramps?.some(r => !positive(r.launch))) fail('invalid launch');
+  if (track.crossings?.some(g => !progress(g.progress) || !positive(g.period) || !Number.isFinite(g.offset))) fail('invalid lock');
   if (!positive(track.ai.lookAheadScale) || !positive(track.ai.speedScale)) fail('invalid AI tuning');
+  if (track.currents?.some(c => !progress(c.progress) || !Number.isFinite(c.lateralOffset) ||
+    !positive(c.innerRadius) || !positive(c.outerRadius) || c.innerRadius >= c.outerRadius ||
+    !positive(c.speed) || c.speed > 10 || (c.spin !== 1 && c.spin !== -1))) fail('invalid current');
+  if (track.routes?.some(r => r.anchors.length < 2 || r.anchors.some(([p, offset], i) =>
+    !progress(p) || !Number.isFinite(offset) || (i > 0 && p <= r.anchors[i - 1][0])))) fail('invalid optional route');
   const { gold, silver, bronze } = track.timeTrialTargets;
   if (!positive(gold) || !(gold < silver && silver < bronze) || !positive(bronze)) fail('invalid time targets');
 }

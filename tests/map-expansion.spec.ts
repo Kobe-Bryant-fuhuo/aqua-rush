@@ -1,6 +1,7 @@
+import { CurrentField } from '../src/game/CurrentField';
 import { expect, test } from '@playwright/test';
 import * as THREE from 'three';
-import { TRACK_IDS, getTrackDefinition, isTrackId } from '../src/game/ContentCatalog';
+import { TRACK_IDS, getTrackDefinition, isTrackId, isOnlineTrackId } from '../src/game/ContentCatalog';
 import { validateTrackDefinition } from '../src/game/TrackValidation';
 import { RaceTrack } from '../src/game/Track';
 import { RaceManager } from '../src/game/RaceManager';
@@ -14,12 +15,16 @@ import { parseClientMessage } from '../src/shared/OnlineProtocol';
 test.beforeEach(({}, info) => test.skip(info.project.name !== 'desktop-chrome', 'Headless rules run once.'));
 
 test('content rejects invalid geometry and keeps concept maps out of both catalogs', () => {
-  const base = getTrackDefinition('neon-leviathan');
+  const base = getTrackDefinition('sunken-temple');
   expect(() => validateTrackDefinition({ ...base, controlPoints: [[Infinity, 0]] })).toThrow();
   expect(() => validateTrackDefinition({ ...base, checkpoints: [...base.checkpoints].reverse() })).toThrow();
   expect(() => validateTrackDefinition({ ...base, interactions: [base.interactions[0], base.interactions[0]] })).toThrow();
-  for (const id of ['tidal-roulette', 'shipbreaker', 'skyfall-spillway', '__proto__']) expect(isTrackId(id)).toBe(false);
-  for (const id of TRACK_IDS.filter(id => getTrackDefinition(id).experimental)) {
+  for (const id of ['sunset-circuit', 'storm-reef', 'neon-leviathan', 'caldera-throat', 'storm-needle', 'tidal-roulette', 'shipbreaker', 'skyfall-spillway', '__proto__']) {
+    expect(isTrackId(id)).toBe(false);
+    expect(isOnlineTrackId(id)).toBe(false);
+    expect(parseClientMessage(JSON.stringify({ type: 'track', trackId: id }))).toBeNull();
+  }
+  for (const id of TRACK_IDS.filter(id => getTrackDefinition(id).experimental && !isOnlineTrackId(id))) {
     expect(parseClientMessage(JSON.stringify({ type: 'track', trackId: id }))).toBeNull();
   }
 });
@@ -98,6 +103,8 @@ for (const id of TRACK_IDS) {
     const collisions = new CollisionSystem();
     const frames = () => boats.map(b => ({ id: b.id, position: b.group.position, velocity: b.velocity }));
     const initial = new Map<string, number>();
+    const currents = new CurrentField(track);
+    boats.forEach(boat => { boat.currentField = currents; boat.worldMechanics = track.mechanics; });
     boats.forEach((boat, i) => {
       const slot = track.definition.spawnGrid[i];
       boat.reset(track.getOffsetPoint(slot.progress, slot.lane), track.headingAt(slot.progress));
@@ -111,7 +118,7 @@ for (const id of TRACK_IDS) {
           const state = race.getState(boat.id);
           boat.update(1 / 60, tick / 60, track, waves, race.raceScore(boat.id), race.raceScore('coral'), state.nextCheckpoint, !state.finished);
         }
-        collisions.resolve(boats, track);
+        collisions.resolve(boats, track, tick / 60);
         interactions.update(1 / 60, boats.filter(b => !race.getState(b.id).finished), true, id => race.getState(id).lap);
         interactions.consumeEvents();
         race.update(1 / 60, frames(), track);

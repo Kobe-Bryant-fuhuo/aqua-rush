@@ -12,7 +12,7 @@ import {
 } from './race-test-helpers';
 
 const MODES: readonly RaceMode[] = ['quick-race', 'time-trial'];
-const TRACKS: readonly TrackId[] = ['sunset-circuit', 'storm-reef'];
+const TRACKS: readonly TrackId[] = ['breakwater', 'nightfall'];
 
 async function advanceGame(page: Page, milliseconds: number): Promise<void> {
   await page.evaluate((duration) => {
@@ -32,6 +32,7 @@ async function startThroughMenus(page: Page, mode: RaceMode, trackId: TrackId): 
   await page.locator(`#mode-${mode}-button`).click();
   await expect.poll(async () => (await readRaceDiagnostics(page)).flow.state).toBe('track-select');
   await page.locator(`#course-${trackId}-button`).click();
+    await page.locator('#course-race-button').click();
 
   await expect.poll(async () => (await readRaceDiagnostics(page)).flow.state).toBe('countdown');
   await advanceGame(page, 3_100);
@@ -170,8 +171,8 @@ test.describe('V3 runtime product contracts', () => {
 
   test('open water remains drivable 150-200 units off route and explicit recovery preserves progress', async ({ page }) => {
     const errors = captureRuntimeErrors(page);
-    await prepareTimeTrial(page, 'sunset-circuit');
-    const staged = findOpenWaterPoint('sunset-circuit');
+    await prepareTimeTrial(page, 'breakwater');
+    const staged = findOpenWaterPoint('breakwater');
     await callRaceHook(page, 'setPlayerKinematics', staged.x, staged.y, staged.z, 0, 0, 0);
     await advanceGame(page, 34);
     const beforeDrive = await readRaceDiagnostics(page);
@@ -212,8 +213,8 @@ test.describe('V3 runtime product contracts', () => {
 
   test('Boost Gate runs ready to success feedback, cooldown for the rest of the lap without overlap retrigger', async ({ page }) => {
     const errors = captureRuntimeErrors(page);
-    let diagnostics = await prepareTimeTrial(page, 'sunset-circuit');
-    const gate = interactionGate('sunset-circuit', 'boost-gate');
+    let diagnostics = await prepareTimeTrial(page, 'breakwater');
+    const gate = interactionGate('breakwater', 'boost-gate');
     const gateBefore = diagnostics.interactions.gates.find((candidate) => candidate.id === gate.definition.id);
     expect(gateBefore).toMatchObject({ phase: 'ready', outcome: 'none', activationCount: 0 });
 
@@ -251,8 +252,8 @@ test.describe('V3 runtime product contracts', () => {
 
   test('Drift Gate reports failure without drift and success during a real drift', async ({ page }) => {
     const errors = captureRuntimeErrors(page);
-    let diagnostics = await prepareTimeTrial(page, 'storm-reef');
-    const gate = interactionGate('storm-reef', 'drift-gate');
+    let diagnostics = await prepareTimeTrial(page, 'nightfall');
+    const gate = interactionGate('nightfall', 'drift-gate');
 
     await callRaceHook(page, 'setPlayerKinematics', gate.center.x, gate.center.y, gate.center.z, 0, 0, 0);
     await advanceGame(page, 34);
@@ -263,7 +264,7 @@ test.describe('V3 runtime product contracts', () => {
 
     // Reset only the session/gate lifecycle, then create a real production
     // drift using keyboard input before entering the staged gate position.
-    diagnostics = await prepareTimeTrial(page, 'storm-reef');
+    diagnostics = await prepareTimeTrial(page, 'nightfall');
     await page.keyboard.down('KeyW');
     await advanceGame(page, 1_700);
     await page.keyboard.down('KeyD');
@@ -309,6 +310,7 @@ test.describe('V3 runtime product contracts', () => {
       await page.locator('#title-start-button').click();
       await page.locator('#mode-time-trial-button').click();
       await page.locator(`#course-${trackId}-button`).click();
+    await page.locator('#course-race-button').click();
       await advanceGame(page, 3_200);
       const active = await readRaceDiagnostics(page);
       samples.push({ trackId, ...active.renderer });

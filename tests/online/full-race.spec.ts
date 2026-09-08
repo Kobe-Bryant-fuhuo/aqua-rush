@@ -5,7 +5,7 @@ import type { RoomSnapshot, ServerMessage } from '../../src/shared/OnlineProtoco
 import { Peer } from './Peer';
 import { pilot } from './pilot';
 
-for (const trackId of ['sunset-circuit', 'storm-reef'] as const) {
+for (const trackId of ['breakwater', 'nightfall', 'sunken-temple'] as const) {
   test(`four real socket clients naturally finish ${trackId} and rematch`, async ({ request, baseURL }, testInfo) => {
     test.skip(process.env.ONLINE_FULL_RACE !== '1' || testInfo.project.name !== 'desktop-chrome', 'Opt-in real-time full-race verification.');
     test.setTimeout(240_000);
@@ -37,7 +37,7 @@ for (const trackId of ['sunset-circuit', 'storm-reef'] as const) {
           }
           const racer = message.race?.racers.find((entry) => entry.id === welcome.playerId);
           if (message.phase === 'racing' && racer && !racer.race.finished) {
-            peer.send({ type: 'input', matchId, seq: ++sequence, ...pilot(track, racer, slot) });
+            peer.send({ type: 'input', matchId, seq: ++sequence, ...pilot(track, racer, slot, message.race!.elapsed) });
           }
           if (message.phase === 'results' && slot === 0) finishedResolve(message);
         });
