@@ -1,3 +1,5 @@
+import { AchievementPanel } from '../systems/AchievementPanel';
+import type { AchievementEvent } from './Achievements';
 import { CourseFeatureVisuals } from '../assets/CourseFeatureVisuals';
 import { CurrentField } from './CurrentField';
 import { updateDrafting } from '../shared/RaceDrafting';
@@ -76,6 +78,8 @@ export class Game {
   private readonly saveStore = new SaveStore();
   private saveData!: SaveData;
   private saveAvailable = true;
+  private readonly achievementPanel: AchievementPanel;
+  private achievementFinishRecorded = false;
   private readonly flow = new GameFlow();
   private config: RaceConfig = makeRaceConfig('quick-race', 'breakwater');
   private readonly tuning: DebugTuning = {
@@ -123,6 +127,7 @@ export class Game {
     this.renderer = createRenderer(canvas);
     const loaded = this.saveStore.load();
     this.saveData = loaded.data;
+    this.achievementPanel = new AchievementPanel(() => this.saveData.achievements, () => this.saveStore.available);
     this.saveAvailable = loaded.storageAvailable;
     this.reducedMotion = loaded.data.settings.reducedMotion;
     this.audio.setMuted(loaded.data.settings.muted);
@@ -238,6 +243,7 @@ export class Game {
     this.input.dispose();
     this.audio.dispose();
     this.hud.dispose();
+    this.achievementPanel.dispose();
     this.debugTools.dispose();
     this.allBoats.forEach((boat) => boat.dispose());
     this.originalBoatModels.forEach((model) => model.dispose());
@@ -366,6 +372,8 @@ export class Game {
     this.onlineEventSequence = Math.max(0, ...snapshot.race!.events.map((entry) => entry.id));
     this.onlinePhase = null;
     this.lastCountdownPresentation = null;
+    this.achievementFinishRecorded = false;
+    this.lastSkillSerial = 0;
     this.lastBoosting = this.lastMiniBoosting = false;
     this.lastLandingByBoat.clear();
     this.audio.reset();
@@ -394,6 +402,7 @@ export class Game {
       this.onlinePhase = snapshot.phase;
     }
     if (!wasFinished && this.race.getState(this.player.id).finished) {
+      this.recordFinishAchievement(this.race.getState(this.player.id).place, 'online');
       this.audio.finish(this.race.getState(this.player.id).place);
       this.hud.announce('FINISHED — WAITING FOR OTHER RACERS', 'info');
     }
@@ -511,6 +520,8 @@ export class Game {
     this.recoveryCount = 0;
     this.lastRecoveryReason = null;
     this.lastCountdownPresentation = null;
+    this.achievementFinishRecorded = false;
+    this.lastSkillSerial = 0;
     const grid = this.track.definition.spawnGrid.map((slot, index) => ({
       boat: this.allBoats[index],
       ...slot,
@@ -657,7 +668,20 @@ export class Game {
     }
   }
 
+  private recordAchievement(event: AchievementEvent): void {
+    const unlocked = this.saveStore.recordAchievement(event);
+    this.saveData = this.saveStore.snapshot();
+    this.achievementPanel.notify(unlocked);
+  }
+
+  private recordFinishAchievement(place: number, mode: string): void {
+    if (this.achievementFinishRecorded) return;
+    this.achievementFinishRecorded = true;
+    this.recordAchievement({ type: 'finish', trackId: this.config.trackId, mode, place });
+  }
+
   private showResults(place: number, totalTime: number): void {
+    this.recordFinishAchievement(place, this.config.mode);
     const playerState = this.race.getState(this.player.id);
     const result = this.recordTimeTrialIfNeeded(playerState.bestLap, totalTime);
     this.hud.showResultsV3({
@@ -691,6 +715,9 @@ export class Game {
     if (this.player.skillSerial !== this.lastSkillSerial) {
       this.lastSkillSerial = this.player.skillSerial;
       if (this.player.skillSerial > 0) {
+        if (!this.online?.active && this.race.phase === 'racing') {
+          this.recordAchievement({ type: 'skill', kind: this.player.skillKind, chain: this.player.skillChain });
+        }
         const skillName = ['', '漂移释放', '精准落水', '抢门成功', '尾流超车'][this.player.skillKind] ?? '技巧';
         this.hud.announce(skillName + ' / 连段 ×' + this.player.skillChain, 'boost');
       }

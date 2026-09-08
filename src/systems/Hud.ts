@@ -631,6 +631,8 @@ export class Hud {
     this.announce('Time Trial records reset', 'info');
   };
   private readonly handleModalKey = (event: KeyboardEvent) => {
+    // Native dialogs own focus and Escape while displayed above the game menus.
+    if (document.querySelector('dialog[open]')) return;
     const modal = this.visibleModal();
     if (!modal) return;
     if (event.code === 'Tab') this.trapFocus(event, modal);

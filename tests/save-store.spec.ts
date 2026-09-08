@@ -1,3 +1,4 @@
+import { cleanAchievements } from '../src/game/Achievements';
 import { TRACK_IDS, getTrackDefinition } from '../src/game/ContentCatalog';
 import { expect, test } from '@playwright/test';
 import {
@@ -47,6 +48,7 @@ class ThrowingStorage extends MemoryStorage {
 
 const defaultData = (): SaveData => ({
   version: SAVE_SCHEMA_VERSION,
+  achievements: cleanAchievements(),
   settings: { muted: false, reducedMotion: false },
   lastSelection: { mode: 'quick-race', trackId: 'breakwater' },
   timeTrial: Object.fromEntries(TRACK_IDS.map(id => [id, { bestLap: null, bestTotal: null, ...(getTrackDefinition(id).rulesRevision ? { rulesRevision: getTrackDefinition(id).rulesRevision } : {}) }])) as SaveData['timeTrial'],
@@ -91,6 +93,7 @@ test.describe('V3 versioned SaveStore contract', () => {
     const storage = new MemoryStorage();
     const valid: SaveData = {
       version: SAVE_SCHEMA_VERSION,
+  achievements: cleanAchievements(),
       settings: { muted: true, reducedMotion: true },
       lastSelection: { mode: 'time-trial', trackId: 'nightfall' },
       timeTrial: {
@@ -136,7 +139,8 @@ test.describe('V3 versioned SaveStore contract', () => {
     const result = new SaveStore().load();
     expect(result.storageAvailable).toBe(true);
     expect(result.repaired).toBe(true);
-    expect(result.data).toEqual({ ...legacy, version: SAVE_SCHEMA_VERSION, timeTrial: { ...defaultData().timeTrial, ...legacy.timeTrial } });
+    expect(result.data).toEqual({ ...legacy, version: SAVE_SCHEMA_VERSION,
+  achievements: cleanAchievements(), timeTrial: { ...defaultData().timeTrial, ...legacy.timeTrial } });
     expect(JSON.parse(storage.getItem(SAVE_STORAGE_KEY) ?? 'null')).toEqual(result.data);
   });
 
@@ -220,6 +224,7 @@ test.describe('V3 versioned SaveStore contract', () => {
     store.resetRecords();
     expect(store.snapshot()).toEqual({
       version: SAVE_SCHEMA_VERSION,
+  achievements: cleanAchievements(),
       settings: { muted: true, reducedMotion: true },
       lastSelection: { mode: 'time-trial', trackId: 'nightfall' },
       timeTrial: defaultData().timeTrial,

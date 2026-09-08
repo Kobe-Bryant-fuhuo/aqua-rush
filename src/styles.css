@@ -1821,3 +1821,22 @@ button:focus-visible {
   #course-race-button { grid-column: 2; grid-row: 1 / 5; width: auto; margin: 0; }
   #race-minimap { top: calc(var(--safe-top) + 105px); width: 80px; height: 80px; }
 }
+
+/* The captain's log stays in the menu; rewards briefly sit at the screen edge. */
+.achievement-dialog { color: var(--cream); background: #0c344b; border: 1px solid var(--cyan); border-radius: 18px; width: min(640px, calc(100vw - 28px)); max-height: calc(100dvh - 36px); padding: 24px; overflow-y: auto; }
+.achievement-dialog::backdrop { background: rgba(4, 20, 34, .78); }
+.achievement-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.achievement-dialog h2 { margin: 6px 0; font-size: 30px; }
+.achievement-dialog > p { font-size: 13px; color: var(--cream); }
+.achievement-list { display: grid; gap: 10px; }
+.achievement-list article { display: flex; align-items: center; gap: 16px; padding: 16px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.15); border-radius: 10px; }
+.achievement-list article[data-unlocked="true"] { border-color: var(--sun); }
+.achievement-emblem { color: var(--sun); font-size: 26px; }
+.achievement-list article > div { flex: 1; min-width: 0; }
+.achievement-list h3 { display: flex; justify-content: space-between; gap: 10px; margin: 0; font-size: 17px; }
+.achievement-list h3 small { font-size: 12px; font-weight: normal; white-space: nowrap; color: var(--sun); }
+.achievement-list p { margin: 7px 0; font-size: 13px; line-height: 1.5; }
+.achievement-list progress { display: block; width: 100%; height: 5px; accent-color: var(--sun); }
+.achievement-toast { position: fixed; z-index: 100; top: max(110px, env(safe-area-inset-top)); left: 16px; max-width: calc(100vw - 32px); padding: 13px 18px; border-left: 3px solid var(--sun); border-radius: 6px; background: #0c344b; color: var(--sun); font-size: 15px; pointer-events: none; box-shadow: 0 4px 20px #0004; }
+#achievements-button { margin-top: 10px; }
+@media (max-width: 500px) { .achievement-dialog { padding: 16px; } .achievement-list article { padding: 12px; gap: 10px; } .achievement-toast { top: auto; bottom: max(170px, env(safe-area-inset-bottom)); font-size: 13px; } }

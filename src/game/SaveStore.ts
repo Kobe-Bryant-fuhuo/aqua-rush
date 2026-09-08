@@ -1,3 +1,4 @@
+import { cleanAchievements, applyAchievementEvent, type AchievementData, type AchievementEvent } from './Achievements';
 import { TRACK_IDS, isTrackId, getTrackDefinition, type RaceMode, type TrackId } from './ContentCatalog';
 
 export const SAVE_SCHEMA_VERSION = 1 as const;
@@ -20,6 +21,7 @@ export type SaveData = {
     trackId: TrackId;
   };
   timeTrial: Record<TrackId, TimeTrialRecord>;
+  achievements: AchievementData;
   archivedTimeTrial?: Record<string, TimeTrialRecord>;
 };
 
@@ -31,6 +33,7 @@ export type SaveLoadResult = {
 
 const defaults = (): SaveData => ({
   version: SAVE_SCHEMA_VERSION,
+  achievements: cleanAchievements(),
   settings: { muted: false, reducedMotion: false },
   lastSelection: { mode: 'quick-race', trackId: 'breakwater' },
   timeTrial: Object.fromEntries(TRACK_IDS.map(id => [id, emptyRecord(id)])) as SaveData['timeTrial'],
@@ -108,6 +111,7 @@ export class SaveStore {
           },
           lastSelection: { mode, trackId },
           timeTrial,
+          achievements: cleanAchievements(parsed.achievements),
           ...(Object.keys(archived).length ? { archivedTimeTrial: archived } : {}),
         };
       }
@@ -118,6 +122,8 @@ export class SaveStore {
     if (repaired) this.flush();
     return { data: this.snapshot(), storageAvailable: this.storageAvailable, repaired };
   }
+
+  get available(): boolean { return this.storageAvailable; }
 
   snapshot(): SaveData {
     return JSON.parse(JSON.stringify(this.data)) as SaveData;
@@ -146,6 +152,12 @@ export class SaveStore {
     if (newTotalRecord) record.bestTotal = total;
     if (newLapRecord || newTotalRecord) this.flush();
     return { newLapRecord, newTotalRecord };
+  }
+
+  recordAchievement(event: AchievementEvent): string[] {
+    const unlocked = applyAchievementEvent(this.data.achievements, event);
+    this.flush();
+    return unlocked;
   }
 
   resetRecords(): void {

@@ -162,3 +162,9 @@ Runtime/tool dependencies and the licence identifiers reported by their packages
 | Wrangler | Cloudflare development and deployment | MIT OR Apache-2.0 |
 
 These packages retain their own upstream licences in `node_modules` after installation.
+
+## Achievements / 航海成就
+
+Open **◇ 航海成就** from the title menu to view eight achievements and their progress. Finish races, win Quick Race or Online Race, complete all three courses, finish a Time Trial, or practice local drift releases, precise landings and three-skill chains. Unlocks display brief queued notifications without interrupting racing.
+
+Progress is saved in this browser alongside existing settings and records. Older saves start with an empty achievement log; past races are not reconstructed. Resetting Time Trial records keeps achievements. Local skill achievements use local race events; online completion achievements use received race state. If browser storage is unavailable, progress lasts only for the current session.
