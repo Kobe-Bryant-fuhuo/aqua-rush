@@ -87,6 +87,13 @@ export class CameraRig {
     this.trauma = Math.min(1, this.trauma + Math.max(0, amount));
   }
 
+  landingImpact(intensity: number): void {
+    if (this.reducedMotion) return;
+    const strength = THREE.MathUtils.clamp(intensity, 0, 1);
+    this.cameraVelocity.y -= strength * 3.8;
+    this.addTrauma(0.12 + strength * 0.34);
+  }
+
   punchFov(degrees: number): void {
     if (this.reducedMotion) return;
     this.fovPunch = Math.min(8, this.fovPunch + degrees);

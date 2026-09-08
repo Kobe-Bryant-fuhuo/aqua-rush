@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FAIR_WAVES } from './SeaStatePresets';
 
 export type WaveSample = {
   height: number;
@@ -16,12 +17,7 @@ export type GerstnerWave = Readonly<{
 }>;
 
 /** One authored wave field used by both the CPU boat pose and the GPU ocean. */
-export const GERSTNER_WAVES: readonly GerstnerWave[] = [
-  { directionX: 0.9404, directionZ: 0.3401, amplitude: 0.28, frequency: 0.095, speed: 0.82, phase: 0.2, steepness: 0.56 },
-  { directionX: -0.2899, directionZ: 0.9571, amplitude: 0.17, frequency: 0.16, speed: 1.08, phase: 1.8, steepness: 0.46 },
-  { directionX: 0.6606, directionZ: -0.7507, amplitude: 0.1, frequency: 0.285, speed: 1.48, phase: 3.1, steepness: 0.34 },
-  { directionX: -0.8321, directionZ: -0.5547, amplitude: 0.065, frequency: 0.42, speed: 1.82, phase: 4.35, steepness: 0.22 },
-] as const;
+export const GERSTNER_WAVES = FAIR_WAVES;
 
 export const GERSTNER_WAVE_COUNT = GERSTNER_WAVES.length;
 

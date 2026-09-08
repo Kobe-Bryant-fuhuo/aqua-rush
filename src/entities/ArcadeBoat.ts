@@ -38,8 +38,8 @@ export const DEFAULT_PLAYER_TUNING: BoatTuning = {
 };
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
-const WAVE_ALONG_ACCELERATION = 10;
-const WAVE_LATERAL_ACCELERATION = 7.5;
+const WAVE_ALONG_ACCELERATION = 16;
+const WAVE_LATERAL_ACCELERATION = 12;
 
 export type WaveHandlingState = {
   /** Positive when the bow is climbing a wave. */
@@ -109,12 +109,8 @@ export class ArcadeBoat {
   private readonly forward = new THREE.Vector3(0, 0, -1);
   private readonly planarRight = new THREE.Vector3(1, 0, 0);
   private readonly desiredVelocity = new THREE.Vector3();
-  private readonly surfaceNormal = new THREE.Vector3(0, 1, 0);
   private readonly surfaceForward = new THREE.Vector3();
   private readonly surfaceRight = new THREE.Vector3();
-  private readonly surfaceBack = new THREE.Vector3();
-  private readonly poseMatrix = new THREE.Matrix4();
-  private readonly poseQuaternion = new THREE.Quaternion();
   private readonly ownedGeometries: THREE.BufferGeometry[] = [];
   private readonly ownedMaterials: THREE.Material[] = [];
   private currentSteer = 0;
@@ -123,6 +119,10 @@ export class ArcadeBoat {
   private miniBoostTimer = 0;
   private miniBoostStrength = 0;
   private verticalVelocity = 0;
+  private hullPitch = 0;
+  private hullRoll = 0;
+  private pitchVelocity = 0;
+  private rollVelocity = 0;
 
   /** A null model runs the same simulation without geometry or global AI registration. */
   constructor(readonly id: string, color: THREE.ColorRepresentation, model?: THREE.Object3D | null) {
@@ -195,25 +195,26 @@ export class ArcadeBoat {
     this.steering = steer;
     this.throttle = throttle;
 
+    const thrustContact = this.airborne ? 0.02 : THREE.MathUtils.lerp(0.12, 1, this.contact);
     if (throttle > 0) {
-      this.speed += tuning.acceleration * throttle * delta;
+      this.speed += tuning.acceleration * throttle * thrustContact * delta;
     } else if (throttle < 0) {
-      if (this.speed > 0.25) this.speed += tuning.braking * throttle * delta;
-      else this.speed += tuning.reverseAcceleration * throttle * delta;
+      if (this.speed > 0.25) this.speed += tuning.braking * throttle * thrustContact * delta;
+      else this.speed += tuning.reverseAcceleration * throttle * thrustContact * delta;
     } else {
-      const drag = tuning.coastDrag * delta;
+      const drag = tuning.coastDrag * (this.airborne ? 0.08 : 1) * delta;
       this.speed = Math.abs(this.speed) <= drag ? 0 : this.speed - Math.sign(this.speed) * drag;
     }
 
     if (this.ordinaryBoosting) {
-      this.speed += tuning.boostAcceleration * delta;
+      this.speed += tuning.boostAcceleration * thrustContact * delta;
       this.boost = Math.max(0, this.boost - tuning.boostDrain * delta);
     } else {
       const rechargeScale = this.drifting ? 0.35 : 1;
       this.boost = Math.min(1, this.boost + tuning.boostRecharge * rechargeScale * delta);
     }
     if (this.miniBoosting) {
-      this.speed += tuning.boostAcceleration * (0.6 + this.miniBoostStrength * 0.62) * delta;
+      this.speed += tuning.boostAcceleration * thrustContact * (0.6 + this.miniBoostStrength * 0.62) * delta;
     }
     if (this.drifting) {
       const poorDriftTax = THREE.MathUtils.lerp(1.2, 0.15, this.driftQuality);
@@ -230,7 +231,7 @@ export class ArcadeBoat {
     this.speed = THREE.MathUtils.clamp(this.speed, -tuning.maxReverseSpeed, maxForward);
     const postAccelerationSpeedRatio = Math.min(1, Math.abs(this.speed) / Math.max(1, tuning.maxForwardSpeed));
     const baseSteeringAuthority = (0.58 + postAccelerationSpeedRatio * 0.42) * (1 - postAccelerationSpeedRatio * 0.13);
-    const steeringAuthority = baseSteeringAuthority * this.waveHandling.steeringAuthority;
+    const steeringAuthority = baseSteeringAuthority * this.waveHandling.steeringAuthority * (this.airborne ? 0.22 : 1);
     const driftTurnBonus = this.drifting ? 1.3 : this.boosting ? 0.94 : 1;
     this.heading += steer * tuning.turnRate * steeringAuthority * driftTurnBonus * Math.sign(this.speed || 1) * delta;
 
@@ -239,7 +240,7 @@ export class ArcadeBoat {
     this.desiredVelocity.copy(this.forward).multiplyScalar(this.speed).add(this.waterCurrent);
     const highSpeedGrip = tuning.lateralGrip * (1 + postAccelerationSpeedRatio * 0.18);
     const grip = (this.drifting ? tuning.driftGrip : highSpeedGrip) * this.waveHandling.gripScale;
-    const gripFactor = 1 - Math.exp(-grip * delta);
+    const gripFactor = 1 - Math.exp(-grip * (this.airborne ? 0.035 : 1) * delta);
     this.velocity.lerp(this.desiredVelocity, gripFactor);
     if (enabled) {
       this.velocity.addScaledVector(this.planarRight, this.waveHandling.lateralAcceleration * delta);
@@ -262,9 +263,22 @@ export class ArcadeBoat {
     const forwardSlope = (bowHeight - sternHeight) / (bowDistance * 2);
     const crossSlope = (starboardHeight - portHeight) / (halfBeam * 2);
 
-    const wasAirborne = this.airborne && !this.flightActive;
-    const descentSpeed = Math.max(0, -this.verticalVelocity);
-    const dt = Math.min(delta, 0.05);
+    // Track ramps use their own authored launch arc. The same relative-water
+    // solver handles free flight and re-entry from natural heavy sea states.
+    const epsilon = 1 / 120;
+    const supportAt = (sx: number, sz: number, time: number): number => (
+      waves.getHeight(sx, sz, time) * 2
+      + waves.getHeight(sx + this.surfaceForward.x * bowDistance, sz + this.surfaceForward.z * bowDistance, time)
+      + waves.getHeight(sx - this.surfaceForward.x * bowDistance, sz - this.surfaceForward.z * bowDistance, time)
+      + waves.getHeight(sx - this.surfaceRight.x * halfBeam, sz - this.surfaceRight.z * halfBeam, time)
+      + waves.getHeight(sx + this.surfaceRight.x * halfBeam, sz + this.surfaceRight.z * halfBeam, time)
+    ) / 6 + 0.42;
+    const waterVelocity = (targetWaterY - supportAt(
+      x - this.velocity.x * epsilon, z - this.velocity.z * epsilon, elapsed - epsilon,
+    )) / epsilon;
+    const dt = Math.min(Math.max(delta, 0), 0.05);
+    const resetting = delta > 0.15 || !Number.isFinite(this.group.position.y);
+    this.landingIntensity = THREE.MathUtils.damp(this.landingIntensity, 0, 4.5, dt);
     this.flightCooldown = Math.max(0, this.flightCooldown - dt);
     if (this.flightActive) {
       this.flightTime += dt;
@@ -308,43 +322,44 @@ export class ArcadeBoat {
         return;
       }
     }
-    if (delta > 0.15 || !Number.isFinite(this.group.position.y)) {
+    if (resetting) {
       this.group.position.y = targetWaterY;
-      this.verticalVelocity = 0;
+      this.verticalVelocity = waterVelocity;
       this.contact = 1;
       this.airborne = false;
+      this.landingIntensity = 0;
     } else {
-      const gap = this.group.position.y - targetWaterY;
-      if (gap < 0.14) {
-        this.verticalVelocity += (targetWaterY - this.group.position.y) * 34 * dt;
-        this.verticalVelocity *= Math.exp(-5.2 * dt);
-      } else {
-        this.verticalVelocity -= 7.8 * dt;
+      // Water pushes up but cannot pull the boat down. Substeps resolve deep
+      // re-entry without teleporting the hull back onto the surface.
+      const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const h = dt / steps;
+      for (let step = 0; step < steps; step += 1) {
+        const support = targetWaterY - waterVelocity * (dt - (step + 1) * h);
+        const gap = this.group.position.y - support;
+        const relativeVelocity = this.verticalVelocity - waterVelocity;
+        if (this.airborne && gap <= 0.06 && relativeVelocity < -0.5) {
+          const impact = THREE.MathUtils.clamp((-relativeVelocity - 0.5) / 8, 0, 1);
+          this.landingIntensity = Math.max(this.landingIntensity, impact);
+          const retention = THREE.MathUtils.lerp(0.99, 0.76, impact);
+          this.speed *= retention;
+          this.velocity.multiplyScalar(retention);
+          this.pitchVelocity -= impact * 1.7;
+          this.rollVelocity += THREE.MathUtils.clamp(crossSlope * impact * 3, -1, 1);
+          this.heading -= THREE.MathUtils.clamp(crossSlope * impact * 0.22, -0.06, 0.06);
+          this.airborne = false;
+        }
+        const wet = 1 - THREE.MathUtils.smoothstep(gap, 0, 0.22);
+        const buoyancy = wet * THREE.MathUtils.clamp(
+          12.5 - gap * 100 - relativeVelocity * 8, 0, 180,
+        );
+        this.verticalVelocity += (buoyancy - 12.5) * h;
+        this.group.position.y += this.verticalVelocity * h;
+        const resolvedGap = this.group.position.y - support;
+        this.contact = 1 - THREE.MathUtils.smoothstep(resolvedGap, 0.015, 0.24);
+        // Hysteresis prevents one landing from firing on every substep.
+        if (resolvedGap > 0.24) this.airborne = true;
+        else if (resolvedGap <= 0.015) this.airborne = false;
       }
-      this.verticalVelocity = THREE.MathUtils.clamp(this.verticalVelocity, -4.2, 3.4);
-      this.group.position.y += this.verticalVelocity * dt;
-      if (this.group.position.y < targetWaterY - 0.12) {
-        this.group.position.y = targetWaterY - 0.12;
-        this.verticalVelocity = Math.max(0, this.verticalVelocity * -0.16);
-      }
-      const resolvedGap = this.group.position.y - targetWaterY;
-      this.contact = 1 - THREE.MathUtils.smoothstep(resolvedGap, 0.045, 0.34);
-      this.airborne = this.contact < 0.25;
-    }
-
-    this.landingIntensity = THREE.MathUtils.damp(this.landingIntensity, 0, 5.5, dt);
-    if (wasAirborne && !this.airborne) {
-      this.landingIntensity = Math.max(
-        this.landingIntensity,
-        THREE.MathUtils.clamp(descentSpeed * 0.24 + Math.abs(this.speed) * 0.012, 0.12, 1),
-      );
-      // A hard, off-camber landing now costs momentum and nudges the bow down
-      // the cross-slope. This makes landing choice matter without taking
-      // control away from an arcade player.
-      const retention = THREE.MathUtils.lerp(0.97, 0.84, this.landingIntensity);
-      this.speed *= retention;
-      this.velocity.multiplyScalar(retention);
-      this.heading -= THREE.MathUtils.clamp(crossSlope * this.landingIntensity * 0.3, -0.055, 0.055);
     }
 
     const speedCoupling = THREE.MathUtils.smoothstep(Math.abs(this.speed), 0.6, 10);
@@ -388,28 +403,37 @@ export class ArcadeBoat {
     );
     this.waveHandling.gripScale = THREE.MathUtils.damp(this.waveHandling.gripScale, targetGripScale, 12, dt);
 
-    // Bow/stern and port/starboard baselines produce stable pitch and roll.
-    this.surfaceForward.set(
-      this.surfaceForward.x * bowDistance * 2,
-      bowHeight - sternHeight,
-      this.surfaceForward.z * bowDistance * 2,
-    ).normalize();
-    this.surfaceRight.set(
-      this.surfaceRight.x * halfBeam * 2,
-      starboardHeight - portHeight,
-      this.surfaceRight.z * halfBeam * 2,
-    ).normalize();
-    this.surfaceNormal.crossVectors(this.surfaceRight, this.surfaceForward).normalize();
-    this.surfaceRight.crossVectors(this.surfaceForward, this.surfaceNormal).normalize();
-    this.surfaceBack.copy(this.surfaceForward).multiplyScalar(-1);
-    this.poseMatrix.makeBasis(this.surfaceRight, this.surfaceNormal, this.surfaceBack);
-    this.poseQuaternion.setFromRotationMatrix(this.poseMatrix);
-    this.group.quaternion.slerp(this.poseQuaternion, 1 - Math.exp(-7.5 * delta));
-
-    const targetRoll = -this.currentSteer * Math.min(this.drifting ? 0.34 : 0.22, Math.abs(this.speed) * 0.0095);
-    const targetPitch = -this.currentThrottle * 0.052 + (this.boosting ? -0.032 : 0) + (this.airborne ? -0.025 : 0);
-    this.visualRoot.rotation.z = THREE.MathUtils.damp(this.visualRoot.rotation.z, targetRoll, 8, delta);
-    this.visualRoot.rotation.x = THREE.MathUtils.damp(this.visualRoot.rotation.x, targetPitch, 7, delta);
+    // Angular inertia preserves takeoff attitude above the waves, then lets
+    // the bow fall. Only a wet hull can align to the local water slope.
+    const targetPitch = Math.atan(forwardSlope) + this.currentThrottle * 0.065
+      + (this.boosting ? 0.045 : 0);
+    const targetRoll = Math.atan(crossSlope)
+      - this.currentSteer * Math.min(this.drifting ? 0.3 : 0.2, Math.abs(this.speed) * 0.009);
+    if (resetting) {
+      this.hullPitch = targetPitch;
+      this.hullRoll = targetRoll;
+      this.pitchVelocity = 0;
+      this.rollVelocity = 0;
+    } else {
+      const angularSteps = Math.max(1, Math.ceil(dt / (1 / 120)));
+      const h = dt / angularSteps;
+      for (let step = 0; step < angularSteps; step += 1) {
+        const wet = this.airborne ? 0 : this.contact;
+        this.pitchVelocity += ((targetPitch - this.hullPitch) * 48 * wet
+          - this.pitchVelocity * (0.35 + wet * 6) - (this.airborne ? 0.48 : 0)) * h;
+        this.rollVelocity += ((targetRoll - this.hullRoll) * 40 * wet
+          - this.rollVelocity * (0.45 + wet * 5)) * h;
+        this.hullPitch = THREE.MathUtils.clamp(this.hullPitch + this.pitchVelocity * h, -0.7, 0.7);
+        this.hullRoll = THREE.MathUtils.clamp(this.hullRoll + this.rollVelocity * h, -0.65, 0.65);
+        if (Math.abs(this.hullPitch) === 0.7) this.pitchVelocity = 0;
+        if (Math.abs(this.hullRoll) === 0.65) this.rollVelocity = 0;
+      }
+    }
+    this.group.rotation.set(this.hullPitch, -this.heading, this.hullRoll, 'YXZ');
+    this.visualRoot.rotation.x = THREE.MathUtils.damp(
+      this.visualRoot.rotation.x, -this.landingIntensity * 0.13, 14, dt,
+    );
+    this.visualRoot.rotation.z = 0;
   }
 
   getForward(target = new THREE.Vector3()): THREE.Vector3 {
@@ -479,6 +503,10 @@ export class ArcadeBoat {
     this.miniBoostTimer = 0;
     this.miniBoostStrength = 0;
     this.verticalVelocity = 0;
+    this.hullPitch = 0;
+    this.hullRoll = 0;
+    this.pitchVelocity = 0;
+    this.rollVelocity = 0;
     this.waveHandling.forwardSlope = 0;
     this.waveHandling.crossSlope = 0;
     this.waveHandling.alongAcceleration = 0;

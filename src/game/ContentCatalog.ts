@@ -5,6 +5,7 @@ import { createWorlds, type TrackId } from './WorldCatalog';
 import type { BlockDefinition, RampDefinition, CrossingDefinition } from './WorldMechanics';
 export type { TrackId } from './WorldCatalog';
 import type { GerstnerWave } from '../systems/WaveSurface';
+import { FAIR_WAVES, BREEZY_WAVES } from '../systems/SeaStatePresets';
 
 export type RaceMode = 'quick-race' | 'time-trial';
 export type InteractionKind = 'boost-gate' | 'drift-gate';
@@ -113,25 +114,11 @@ export type RaceConfig = Readonly<{
   aiCount: 0 | 3;
 }>;
 
-const SUNSET_WAVES: readonly GerstnerWave[] = [
-  { directionX: 0.9404, directionZ: 0.3401, amplitude: 0.28, frequency: 0.095, speed: 0.82, phase: 0.2, steepness: 0.56 },
-  { directionX: -0.2899, directionZ: 0.9571, amplitude: 0.17, frequency: 0.16, speed: 1.08, phase: 1.8, steepness: 0.46 },
-  { directionX: 0.6606, directionZ: -0.7507, amplitude: 0.1, frequency: 0.285, speed: 1.48, phase: 3.1, steepness: 0.34 },
-  { directionX: -0.8321, directionZ: -0.5547, amplitude: 0.065, frequency: 0.42, speed: 1.82, phase: 4.35, steepness: 0.22 },
-] as const;
-
-const STORM_WAVES: readonly GerstnerWave[] = [
-  { directionX: 0.9848, directionZ: 0.1736, amplitude: 0.48, frequency: 0.082, speed: 1.04, phase: 0.6, steepness: 0.66 },
-  { directionX: -0.1736, directionZ: 0.9848, amplitude: 0.32, frequency: 0.135, speed: 1.27, phase: 2.1, steepness: 0.6 },
-  { directionX: 0.7071, directionZ: -0.7071, amplitude: 0.18, frequency: 0.245, speed: 1.62, phase: 3.6, steepness: 0.44 },
-  { directionX: -0.9135, directionZ: -0.4067, amplitude: 0.1, frequency: 0.39, speed: 2.02, phase: 5.0, steepness: 0.3 },
-] as const;
-
 const sunsetEnvironment: EnvironmentPreset = {
   id: 'sunset',
   label: 'Golden-hour island circuit',
-  water: '#168eaf',
-  deepWater: '#07516d',
+  water: '#159cb2',
+  deepWater: '#07547a',
   foam: '#fff3d7',
   fog: '#f2b778',
   skyTop: '#397ac8',
@@ -159,8 +146,8 @@ const stormEnvironment: EnvironmentPreset = {
   ambiencePreset: 'storm-squall',
 };
 
-const sunsetWavePreset: WavePreset = { id: 'sunset-swell', waves: SUNSET_WAVES, visualStrength: 1 };
-const stormWavePreset: WavePreset = { id: 'storm-cross-swell', waves: STORM_WAVES, visualStrength: 1.55 };
+const sunsetWavePreset: WavePreset = { id: 'sunset-swell', waves: FAIR_WAVES, visualStrength: 0.65 };
+const stormWavePreset: WavePreset = { id: 'reef-breeze', waves: BREEZY_WAVES, visualStrength: 0.8 };
 
 export const TRACK_CATALOG = Object.freeze(createWorlds(sunsetEnvironment, stormEnvironment, sunsetWavePreset, stormWavePreset));
 Object.values(TRACK_CATALOG).forEach(validateTrackDefinition);

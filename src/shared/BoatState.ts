@@ -5,6 +5,7 @@ export const BOAT_NUMBERS = [
   'flightTime', 'flightCooldown', 'jumps', 'speed', 'heading', 'boost', 'driftCharge', 'driftQuality', 'contact',
   'landingIntensity', 'steering', 'throttle', 'currentSteer', 'currentThrottle',
   'driftDirection', 'miniBoostTimer', 'miniBoostStrength', 'verticalVelocity',
+  'hullPitch', 'hullRoll', 'pitchVelocity', 'rollVelocity',
 ] as const;
 export const BOAT_FLAGS = ['drafting', 'draftReady', 'flightActive', 'boosting', 'ordinaryBoosting', 'miniBoosting', 'drifting', 'airborne'] as const;
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARCADE_PALETTE } from './Materials';
+import type { WaveSurface } from '../systems/WaveSurface';
 
 export type WakeState = {
   position: THREE.Vector3;
@@ -7,6 +8,7 @@ export type WakeState = {
   speed: number;
   boost?: number;
   drift?: number;
+  contact?: number;
 };
 
 type WakeParticle = {
@@ -98,9 +100,12 @@ export class VfxSystem {
   private wakeCursor = 0;
   private sprayCursor = 0;
   private streakCursor = 0;
+  private waveSurface?: WaveSurface;
+  private waterTime = 0;
+  private readonly waveQuaternion = new THREE.Quaternion();
   private rngState = 0x91e10da5;
 
-  constructor(maxWake = 80, maxSpray = 96) {
+  constructor(maxWake = 80, maxSpray = 256) {
     this.root.name = 'boatVfx';
     const wakeGeometry = createWakeRibbonGeometry();
     const wakeMaterial = new THREE.MeshBasicMaterial({
@@ -142,12 +147,20 @@ export class VfxSystem {
       vertexColors: true,
       transparent: true,
       opacity: 0.88,
-      size: 0.13,
+      size: 0.16,
       sizeAttenuation: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     });
+    // Soft round droplets, avoiding bright square confetti over the water.
+    sprayMaterial.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
+        'vec2 dropletUv = gl_PointCoord * 2.0 - 1.0;\n'
+        + 'diffuseColor.a *= 1.0 - smoothstep(0.25, 1.0, dot(dropletUv, dropletUv));\n'
+        + '#include <opaque_fragment>');
+    };
+    sprayMaterial.customProgramCacheKey = () => 'soft-water-droplets-v1';
     this.sprayPoints = new THREE.Points(sprayGeometry, sprayMaterial);
     this.sprayPoints.name = 'pooledSpray';
     this.sprayPoints.frustumCulled = false;
@@ -196,7 +209,7 @@ export class VfxSystem {
 
   /** High-level wake call. Pass a stable id once per frame for each visible boat. */
   updateBoatWake(id: string, state: WakeState, delta: number): void {
-    if (state.speed < 1.5) {
+    if (state.speed < 1.5 || (state.contact ?? 1) < 0.25) {
       this.wakeTimers.set(id, 0);
       return;
     }
@@ -247,19 +260,34 @@ export class VfxSystem {
   }
 
   emitSpray(position: THREE.Vector3, normal = this.up, intensity = 1): void {
-    const count = Math.max(2, Math.min(14, Math.round(3 + intensity * 8)));
+    const count = Math.max(2, Math.min(28, Math.round(3 + intensity * 12)));
     for (let index = 0; index < count; index += 1) {
       const particle = this.acquireSpray();
       particle.active = true;
       particle.age = 0;
-      particle.life = 0.32 + this.random() * 0.42;
+      particle.life = 0.4 + this.random() * 0.45 + Math.min(intensity, 2) * 0.12;
       particle.position.copy(position);
       particle.position.x += (this.random() - 0.5) * 0.45;
       particle.position.z += (this.random() - 0.5) * 0.45;
       particle.velocity
         .set((this.random() - 0.5) * 2.8, 0, (this.random() - 0.5) * 2.8)
-        .addScaledVector(normal, 1.6 + this.random() * 2.8);
+        .addScaledVector(normal, (1.6 + this.random() * 2.8) * (0.8 + Math.min(intensity, 2) * 0.5));
     }
+  }
+
+  /** Broad bow/beam spray and spreading foam on a heavy re-entry. */
+  emitLanding(position: THREE.Vector3, forward: THREE.Vector3, intensity: number): void {
+    const sideX = -forward.z;
+    const sideZ = forward.x;
+    for (const side of [-1, 1] as const) {
+      this.tempPosition.copy(position).addScaledVector(forward, 0.65);
+      this.tempPosition.x += sideX * side * 0.7;
+      this.tempPosition.z += sideZ * side * 0.7;
+      this.tempNormal.set(sideX * side * 0.9, 0.8, sideZ * side * 0.9).normalize();
+      this.emitSpray(this.tempPosition, this.tempNormal, 0.8 + intensity * 1.3);
+      this.spawnWake(this.tempPosition, forward, 1 + intensity, side);
+    }
+    this.emitSpray(position, this.up, 0.6 + intensity);
   }
 
   emitImpact(position: THREE.Vector3, normal = this.up, strength = 1): void {
@@ -285,7 +313,9 @@ export class VfxSystem {
     particle.length = 0.75 + speed01 * 1.15 + boost * 0.72;
   }
 
-  update(delta: number): void {
+  update(delta: number, waves?: WaveSurface, elapsed = 0): void {
+    this.waveSurface = waves;
+    this.waterTime = elapsed;
     this.updateWake(delta);
     this.updateSpray(delta);
     this.updateStreaks(delta);
@@ -317,8 +347,14 @@ export class VfxSystem {
       const progress = particle.age / particle.life;
       const fade = (1 - progress) ** 1.7;
       particle.position.addScaledVector(particle.velocity, delta);
-      particle.position.y += delta * 0.012;
+      if (!this.waveSurface) particle.position.y += delta * 0.012;
       this.quaternion.setFromAxisAngle(this.up, particle.rotation);
+      if (this.waveSurface) {
+        this.waveSurface.getNormal(particle.position.x, particle.position.z, this.waterTime, this.tempNormal);
+        this.waveQuaternion.setFromUnitVectors(this.up, this.tempNormal);
+        this.quaternion.premultiply(this.waveQuaternion);
+        particle.position.y = this.waveSurface.getHeight(particle.position.x, particle.position.z, this.waterTime) + 0.09;
+      }
       this.scale.set(
         particle.width * particle.side * (1 + progress * 1.55) * THREE.MathUtils.clamp(fade * 1.8, 0.04, 1),
         1,
@@ -381,6 +417,12 @@ export class VfxSystem {
       const fade = (1 - progress) ** 1.35;
       particle.position.addScaledVector(particle.velocity, delta);
       this.quaternion.setFromAxisAngle(this.up, particle.rotation);
+      if (this.waveSurface) {
+        this.waveSurface.getNormal(particle.position.x, particle.position.z, this.waterTime, this.tempNormal);
+        this.waveQuaternion.setFromUnitVectors(this.up, this.tempNormal);
+        this.quaternion.premultiply(this.waveQuaternion);
+        particle.position.y = this.waveSurface.getHeight(particle.position.x, particle.position.z, this.waterTime) + 0.09;
+      }
       this.scale.set(particle.width * (1 - progress * 0.35) * THREE.MathUtils.clamp(fade * 1.8, 0.03, 1), 1, particle.length * (1 + progress * 0.45));
       this.matrix.compose(particle.position, this.quaternion, this.scale);
       this.streakMesh.setMatrixAt(index, this.matrix);
